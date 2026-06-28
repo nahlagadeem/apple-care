@@ -11,18 +11,16 @@ function getBoolean(formData, name) {
   return formData.get(name) === "on";
 }
 
-async function getPricingOrThrow(pricingId) {
-  const id = Number(pricingId);
-  if (!Number.isInteger(id)) {
-    throw new Error("Select a valid AppleCare pricing row.");
+function normalizeOptionalPrice(value) {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  const numeric = Number(raw);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    throw new Error("AppleCare price snapshot must be a non-negative number.");
   }
 
-  const pricing = await prisma.appleCarePricing.findUnique({ where: { id } });
-  if (!pricing) {
-    throw new Error("Selected AppleCare pricing row does not exist.");
-  }
-
-  return pricing;
+  return numeric.toFixed(4);
 }
 
 async function assertNoActiveDuplicate({ shop, shopifyVariantId, excludeId }) {
@@ -47,49 +45,60 @@ function getMappingInput(formData) {
     shopifyVariantId: clean(formData.get("shopifyVariantId")),
     shopifyVariantTitle: clean(formData.get("shopifyVariantTitle")),
     shopifySku: clean(formData.get("shopifySku")),
-    appleCarePricingId: formData.get("appleCarePricingId"),
+    appleCareProductId: clean(formData.get("appleCareProductId")),
+    appleCareProductTitle: clean(formData.get("appleCareProductTitle")),
+    appleCareVariantId: clean(formData.get("appleCareVariantId")),
+    appleCareVariantTitle: clean(formData.get("appleCareVariantTitle")),
+    appleCareSku: clean(formData.get("appleCareSku")),
+    appleCarePriceSnapshot: normalizeOptionalPrice(
+      formData.get("appleCarePriceSnapshot"),
+    ),
     isActive: getBoolean(formData, "isActive"),
   };
 
-  if (!input.shopifyProductId) throw new Error("Shopify product ID is required.");
-  if (!input.shopifyProductTitle) throw new Error("Shopify product title is required.");
-  if (!input.shopifyVariantId) throw new Error("Shopify variant ID is required.");
+  if (!input.shopifyProductId) throw new Error("Main Shopify product ID is required.");
+  if (!input.shopifyProductTitle) throw new Error("Main Shopify product title is required.");
+  if (!input.shopifyVariantId) throw new Error("Main Shopify variant ID is required.");
+  if (!input.appleCareProductId) throw new Error("AppleCare Shopify product ID is required.");
+  if (!input.appleCareProductTitle) {
+    throw new Error("AppleCare Shopify product title is required.");
+  }
+  if (!input.appleCareVariantId) {
+    throw new Error("AppleCare Shopify variant ID is required.");
+  }
 
   return input;
+}
+
+function serializeMapping(mapping) {
+  return {
+    id: mapping.id,
+    shopifyProductId: mapping.shopifyProductId,
+    shopifyProductTitle: mapping.shopifyProductTitle,
+    shopifyVariantId: mapping.shopifyVariantId,
+    shopifyVariantTitle: mapping.shopifyVariantTitle || "",
+    shopifySku: mapping.shopifySku || "",
+    appleCareProductId: mapping.appleCareProductId || "",
+    appleCareProductTitle: mapping.appleCareProductTitle || "",
+    appleCareVariantId: mapping.appleCareVariantId || "",
+    appleCareVariantTitle: mapping.appleCareVariantTitle || "",
+    appleCareSku: mapping.appleCareSku || "",
+    appleCarePriceSnapshot: mapping.appleCarePriceSnapshot?.toString() || "",
+    isActive: mapping.isActive,
+    updatedAt: mapping.updatedAt.toISOString(),
+  };
 }
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
 
-  const [pricingRows, mappings] = await Promise.all([
-    prisma.appleCarePricing.findMany({ orderBy: { partNumber: "asc" } }),
-    prisma.appleCareProductMapping.findMany({
-      where: { shop: session.shop },
-      include: { appleCarePricing: true },
-      orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
-    }),
-  ]);
+  const mappings = await prisma.appleCareProductMapping.findMany({
+    where: { shop: session.shop },
+    orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
+  });
 
   return {
-    pricingRows: pricingRows.map((row) => ({
-      id: row.id,
-      partNumber: row.partNumber,
-      description: row.description,
-      sellWithVat: row.sellWithVat.toString(),
-    })),
-    mappings: mappings.map((mapping) => ({
-      id: mapping.id,
-      shopifyProductId: mapping.shopifyProductId,
-      shopifyProductTitle: mapping.shopifyProductTitle,
-      shopifyVariantId: mapping.shopifyVariantId,
-      shopifyVariantTitle: mapping.shopifyVariantTitle || "",
-      shopifySku: mapping.shopifySku || "",
-      appleCarePricingId: mapping.appleCarePricingId,
-      appleCarePartNumber: mapping.appleCarePartNumber,
-      appleCareDescription: mapping.appleCarePricing.description,
-      isActive: mapping.isActive,
-      updatedAt: mapping.updatedAt.toISOString(),
-    })),
+    mappings: mappings.map(serializeMapping),
   };
 };
 
@@ -101,7 +110,6 @@ export const action = async ({ request }) => {
   try {
     if (intent === "create") {
       const input = getMappingInput(formData);
-      const pricing = await getPricingOrThrow(input.appleCarePricingId);
 
       if (input.isActive) {
         await assertNoActiveDuplicate({
@@ -113,14 +121,7 @@ export const action = async ({ request }) => {
       await prisma.appleCareProductMapping.create({
         data: {
           shop: session.shop,
-          shopifyProductId: input.shopifyProductId,
-          shopifyProductTitle: input.shopifyProductTitle,
-          shopifyVariantId: input.shopifyVariantId,
-          shopifyVariantTitle: input.shopifyVariantTitle || null,
-          shopifySku: input.shopifySku || null,
-          appleCarePricingId: pricing.id,
-          appleCarePartNumber: pricing.partNumber,
-          isActive: input.isActive,
+          ...input,
         },
       });
 
@@ -137,7 +138,6 @@ export const action = async ({ request }) => {
       if (!existing) throw new Error("Mapping was not found.");
 
       const input = getMappingInput(formData);
-      const pricing = await getPricingOrThrow(input.appleCarePricingId);
 
       if (input.isActive) {
         await assertNoActiveDuplicate({
@@ -149,16 +149,7 @@ export const action = async ({ request }) => {
 
       await prisma.appleCareProductMapping.update({
         where: { id },
-        data: {
-          shopifyProductId: input.shopifyProductId,
-          shopifyProductTitle: input.shopifyProductTitle,
-          shopifyVariantId: input.shopifyVariantId,
-          shopifyVariantTitle: input.shopifyVariantTitle || null,
-          shopifySku: input.shopifySku || null,
-          appleCarePricingId: pricing.id,
-          appleCarePartNumber: pricing.partNumber,
-          isActive: input.isActive,
-        },
+        data: input,
       });
 
       return { ok: true, message: "Mapping updated." };
@@ -193,26 +184,12 @@ export const action = async ({ request }) => {
   }
 };
 
-function PricingSelect({ pricingRows, defaultValue }) {
-  return (
-    <select name="appleCarePricingId" defaultValue={defaultValue || ""} required>
-      <option value="" disabled>
-        Select AppleCare price
-      </option>
-      {pricingRows.map((row) => (
-        <option key={row.id} value={row.id}>
-          {row.partNumber} - {row.description}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function MappingFields({ pricingRows, mapping }) {
+function MappingFields({ mapping }) {
   return (
     <s-stack gap="small">
+      <s-heading>Main Shopify variant</s-heading>
       <label>
-        Shopify product ID
+        Main product ID
         <input
           name="shopifyProductId"
           defaultValue={mapping?.shopifyProductId || ""}
@@ -220,7 +197,7 @@ function MappingFields({ pricingRows, mapping }) {
         />
       </label>
       <label>
-        Shopify product title
+        Main product title
         <input
           name="shopifyProductTitle"
           defaultValue={mapping?.shopifyProductTitle || ""}
@@ -228,7 +205,7 @@ function MappingFields({ pricingRows, mapping }) {
         />
       </label>
       <label>
-        Shopify variant ID
+        Main variant ID
         <input
           name="shopifyVariantId"
           defaultValue={mapping?.shopifyVariantId || ""}
@@ -236,21 +213,59 @@ function MappingFields({ pricingRows, mapping }) {
         />
       </label>
       <label>
-        Shopify variant title
+        Main variant title
         <input
           name="shopifyVariantTitle"
           defaultValue={mapping?.shopifyVariantTitle || ""}
         />
       </label>
       <label>
-        Shopify SKU
+        Main SKU
         <input name="shopifySku" defaultValue={mapping?.shopifySku || ""} />
       </label>
+
+      <s-heading>AppleCare Shopify variant</s-heading>
       <label>
-        AppleCare pricing
-        <PricingSelect
-          pricingRows={pricingRows}
-          defaultValue={mapping?.appleCarePricingId}
+        AppleCare product ID
+        <input
+          name="appleCareProductId"
+          defaultValue={mapping?.appleCareProductId || ""}
+          required
+        />
+      </label>
+      <label>
+        AppleCare product title
+        <input
+          name="appleCareProductTitle"
+          defaultValue={mapping?.appleCareProductTitle || ""}
+          required
+        />
+      </label>
+      <label>
+        AppleCare variant ID
+        <input
+          name="appleCareVariantId"
+          defaultValue={mapping?.appleCareVariantId || ""}
+          required
+        />
+      </label>
+      <label>
+        AppleCare variant title
+        <input
+          name="appleCareVariantTitle"
+          defaultValue={mapping?.appleCareVariantTitle || ""}
+        />
+      </label>
+      <label>
+        AppleCare SKU
+        <input name="appleCareSku" defaultValue={mapping?.appleCareSku || ""} />
+      </label>
+      <label>
+        AppleCare price snapshot
+        <input
+          name="appleCarePriceSnapshot"
+          defaultValue={mapping?.appleCarePriceSnapshot || ""}
+          inputMode="decimal"
         />
       </label>
       <label>
@@ -266,7 +281,7 @@ function MappingFields({ pricingRows, mapping }) {
 }
 
 export default function MappingsPage() {
-  const { pricingRows, mappings } = useLoaderData();
+  const { mappings } = useLoaderData();
   const actionData = useActionData();
 
   return (
@@ -278,15 +293,11 @@ export default function MappingsPage() {
       ) : null}
 
       <s-section heading="Create mapping">
-        {pricingRows.length === 0 ? (
-          <s-paragraph>Import AppleCare pricing before creating mappings.</s-paragraph>
-        ) : (
-          <Form method="post">
-            <input type="hidden" name="intent" value="create" />
-            <MappingFields pricingRows={pricingRows} />
-            <button type="submit">Create mapping</button>
-          </Form>
-        )}
+        <Form method="post">
+          <input type="hidden" name="intent" value="create" />
+          <MappingFields />
+          <button type="submit">Create mapping</button>
+        </Form>
       </s-section>
 
       <s-section heading="Existing mappings">
@@ -304,9 +315,9 @@ export default function MappingsPage() {
                       {mapping.shopifyProductTitle} - {mapping.shopifyVariantTitle || mapping.shopifyVariantId}
                     </s-heading>
                     <s-paragraph>
-                      {mapping.isActive ? "Active" : "Inactive"} mapping to {mapping.appleCarePartNumber}
+                      {mapping.isActive ? "Active" : "Inactive"} mapping to {mapping.appleCareProductTitle || mapping.appleCareVariantId}
                     </s-paragraph>
-                    <MappingFields pricingRows={pricingRows} mapping={mapping} />
+                    <MappingFields mapping={mapping} />
                     <button type="submit">Save mapping</button>
                   </s-stack>
                 </Form>

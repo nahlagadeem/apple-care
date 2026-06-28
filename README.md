@@ -11,9 +11,9 @@ This initial scaffold includes the installable Shopify app foundation and pricin
 - AppleCare pricing Prisma model and migration
 - Committed AppleCare pricing seed file
 - Admin pricing page at `/app/pricing`
-- Admin product-to-AppleCare mapping page at `/app/mappings`
+- Admin main variant to AppleCare Shopify variant mapping page at `/app/mappings`
 
-Storefront UI, cart logic, checkout behavior, and Shopify AppleCare products/variants are not implemented yet.
+Storefront UI, cart logic, and checkout behavior are not implemented yet.
 
 ## Deployment Pattern
 
@@ -50,7 +50,7 @@ The `DATABASE_URL` value should come from Render PostgreSQL. Keep it out of sour
 
 ## Pricing Import
 
-AppleCare pricing is stored in PostgreSQL through Prisma using `Decimal(12,4)` fields for the workbook prices.
+AppleCare pricing seed data is stored in PostgreSQL through Prisma using `Decimal(12,4)` fields for the workbook prices. This table is kept for audit/reference only. Checkout price calculation must use the mapped Shopify AppleCare product variant price as the source of truth.
 
 ```bash
 npm run prisma:migrate
@@ -75,4 +75,8 @@ AppleCare product mappings are managed at `/app/mappings` inside the embedded Sh
 
 Mappings use Shopify variant ID as the key because cart lines and future checkout behavior are variant-based. This also supports products where different variants need different AppleCare options.
 
-The first mapping UI uses manual Shopify product and variant entry. Each mapping connects one Shopify variant to one imported `AppleCarePricing` row. The database and server action enforce one active AppleCare mapping per shop and Shopify variant.
+The first mapping UI uses manual Shopify product and variant entry. Each mapping connects one main Shopify variant to one AppleCare Shopify variant. `AppleCarePricing` is not required for checkout mapping and must not be used for checkout price calculation.
+
+The mapped AppleCare Shopify variant price is the checkout source of truth. `appleCarePriceSnapshot` is optional reference data for admin review only.
+
+The database and server action enforce one active AppleCare mapping per shop and main Shopify variant.

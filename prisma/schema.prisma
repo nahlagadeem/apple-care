@@ -39,25 +39,26 @@ model AppleCarePricing {
   sellWithVat Decimal  @db.Decimal(12, 4)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  productMappings AppleCareProductMapping[]
 }
 
 model AppleCareProductMapping {
-  id                  Int              @id @default(autoincrement())
-  shop                String
-  shopifyProductId    String
-  shopifyProductTitle String
-  shopifyVariantId    String
-  shopifyVariantTitle String?
-  shopifySku          String?
-  appleCarePricingId  Int
-  appleCarePartNumber String
-  isActive            Boolean          @default(true)
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  appleCarePricing    AppleCarePricing @relation(fields: [appleCarePricingId], references: [id], onDelete: Restrict)
+  id                    Int      @id @default(autoincrement())
+  shop                  String
+  shopifyProductId      String
+  shopifyProductTitle   String
+  shopifyVariantId      String
+  shopifyVariantTitle   String?
+  shopifySku            String?
+  appleCareProductId    String?
+  appleCareProductTitle String?
+  appleCareVariantId    String?
+  appleCareVariantTitle String?
+  appleCareSku          String?
+  appleCarePriceSnapshot Decimal? @db.Decimal(12, 4)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@index([shop, shopifyVariantId])
-  @@index([appleCarePricingId])
+  @@index([appleCareVariantId])
 }
