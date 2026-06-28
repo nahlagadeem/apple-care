@@ -2,7 +2,7 @@
 
 client_id = "REPLACE_WITH_SHOPIFY_CLIENT_ID"
 name = "Apple Care"
-application_url = "https://apple-care.onrender.com"
+application_url = "https://apple-care-m216.onrender.com"
 embedded = true
 
 [build]
@@ -27,10 +27,10 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [
-  "https://apple-care.onrender.com/auth/callback"
+  "https://apple-care-m216.onrender.com/auth/callback"
 ]
 
 [app_proxy]
-url = "https://apple-care.onrender.com"
+url = "https://apple-care-m216.onrender.com"
 subpath = "apple-care"
 prefix = "apps"
