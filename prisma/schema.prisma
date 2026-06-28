@@ -30,3 +30,13 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model AppleCarePricing {
+  id          Int      @id @default(autoincrement())
+  partNumber  String   @unique
+  description String
+  sell        Decimal  @db.Decimal(12, 4)
+  sellWithVat Decimal  @db.Decimal(12, 4)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
