@@ -24,6 +24,7 @@ export default function App() {
         <s-app-nav>
           <s-link href="/app">Home</s-link>
           <s-link href="/app/pricing">Pricing</s-link>
+          <s-link href="/app/mappings">Mappings</s-link>
         </s-app-nav>
       ) : null}
       <Outlet />

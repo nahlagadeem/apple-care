@@ -20,13 +20,13 @@ export default function AppHome() {
               <s-list-item>AppleCarePricing model and migration</s-list-item>
               <s-list-item>Excel import script</s-list-item>
               <s-list-item>Admin Pricing page</s-list-item>
+              <s-list-item>Admin product-to-AppleCare mapping page</s-list-item>
             </s-unordered-list>
           </s-box>
 
           <s-box>
             <s-heading>Not implemented yet</s-heading>
             <s-unordered-list>
-              <s-list-item>Product-to-AppleCare mapping</s-list-item>
               <s-list-item>Storefront product page UI</s-list-item>
               <s-list-item>Product card UI</s-list-item>
               <s-list-item>Cart add-on logic</s-list-item>

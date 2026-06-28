@@ -11,8 +11,9 @@ This initial scaffold includes the installable Shopify app foundation and pricin
 - AppleCare pricing Prisma model and migration
 - Committed AppleCare pricing seed file
 - Admin pricing page at `/app/pricing`
+- Admin product-to-AppleCare mapping page at `/app/mappings`
 
-Product mapping, cart logic, checkout behavior, and storefront UI are not implemented yet.
+Storefront UI, cart logic, checkout behavior, and Shopify AppleCare products/variants are not implemented yet.
 
 ## Deployment Pattern
 
@@ -67,3 +68,11 @@ The command defaults to the committed non-secret seed file at `prisma/apple-care
 For local Excel import testing, set `APPLE_CARE_PRICING_FILE` in a private local `.env` or shell, or pass the workbook path as the first command argument. Do not commit local file paths or database secrets.
 
 `npm run import:pricing:seed` is kept as an alias for the same seed-backed importer, but the Render command is `npm run import:pricing`.
+
+## Product Mappings
+
+AppleCare product mappings are managed at `/app/mappings` inside the embedded Shopify app.
+
+Mappings use Shopify variant ID as the key because cart lines and future checkout behavior are variant-based. This also supports products where different variants need different AppleCare options.
+
+The first mapping UI uses manual Shopify product and variant entry. Each mapping connects one Shopify variant to one imported `AppleCarePricing` row. The database and server action enforce one active AppleCare mapping per shop and Shopify variant.
