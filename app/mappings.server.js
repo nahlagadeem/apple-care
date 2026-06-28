@@ -94,8 +94,9 @@ async function fetchProductById(admin, productId) {
   return product;
 }
 
-function buildSeedMappings(mainProduct, appleCareProduct, appleCareVariant) {
+function buildSeedMappings(shop, mainProduct, appleCareProduct, appleCareVariant) {
   return mainProduct.variants.nodes.map((mainVariant) => ({
+    shop,
     shopifyProductId: mainProduct.id,
     shopifyProductTitle: mainProduct.title,
     shopifyVariantId: mainVariant.id,
@@ -130,7 +131,7 @@ async function seedApprovedMappings({ admin, shop }) {
         mainProduct,
         appleCareProduct,
         appleCareVariant,
-        mappings: buildSeedMappings(mainProduct, appleCareProduct, appleCareVariant),
+        mappings: buildSeedMappings(shop, mainProduct, appleCareProduct, appleCareVariant),
       };
     }),
   );
@@ -152,8 +153,11 @@ async function seedApprovedMappings({ admin, shop }) {
 
   return {
     approvedPairs: pairResults.length,
+    approvedProductPairsProcessed: pairResults.length,
     mappingsRemoved: removedMappings,
+    oldMappingsRemoved: removedMappings,
     mappingsCreated: mappingRows.length,
+    variantMappingsCreated: mappingRows.length,
     seededPairs: pairResults.map((result) => ({
       mainProductTitle: result.mainProduct.title,
       appleCareProductTitle: result.appleCareProduct.title,

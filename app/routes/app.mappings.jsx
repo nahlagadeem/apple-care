@@ -112,9 +112,15 @@ export default function MappingsPage() {
       {actionData?.summary ? (
         <s-section heading="Approved seed result">
           <s-stack gap="small">
-            <s-paragraph>Approved pairs: {actionData.summary.approvedPairs}</s-paragraph>
-            <s-paragraph>Mappings removed: {actionData.summary.mappingsRemoved}</s-paragraph>
-            <s-paragraph>Variant mappings created: {actionData.summary.mappingsCreated}</s-paragraph>
+            <s-paragraph>
+              Approved product pairs processed: {actionData.summary.approvedProductPairsProcessed ?? actionData.summary.approvedPairs}
+            </s-paragraph>
+            <s-paragraph>
+              Old mappings removed: {actionData.summary.oldMappingsRemoved ?? actionData.summary.mappingsRemoved}
+            </s-paragraph>
+            <s-paragraph>
+              Variant mappings created: {actionData.summary.variantMappingsCreated ?? actionData.summary.mappingsCreated}
+            </s-paragraph>
           </s-stack>
 
           {actionData.summary.seededPairs?.length > 0 ? (
