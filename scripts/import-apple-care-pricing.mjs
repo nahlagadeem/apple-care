@@ -5,9 +5,6 @@ import xlsx from "xlsx";
 
 const { readFile, utils } = xlsx;
 
-const DEFAULT_PRICING_FILE =
-  "C:\\Users\\nahla\\OneDrive\\Desktop\\AC+ Portal Pricing.xlsx";
-
 const prisma = new PrismaClient();
 
 function normalizeHeader(value) {
@@ -99,9 +96,14 @@ function readPricingRows(filePath) {
 }
 
 async function main() {
-  const filePath = path.resolve(
-    process.argv[2] || process.env.APPLE_CARE_PRICING_FILE || DEFAULT_PRICING_FILE,
-  );
+  const rawFilePath = process.argv[2] || process.env.APPLE_CARE_PRICING_FILE;
+  if (!rawFilePath) {
+    throw new Error(
+      "Missing AppleCare pricing workbook path. Set APPLE_CARE_PRICING_FILE or pass the path as the first argument.",
+    );
+  }
+
+  const filePath = path.resolve(rawFilePath);
   const pricingRows = readPricingRows(filePath);
 
   let upserted = 0;
