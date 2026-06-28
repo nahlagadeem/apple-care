@@ -7,6 +7,33 @@ function clean(value) {
   return String(value || "").trim();
 }
 
+const PRODUCT_QUERY = `#graphql
+  query AppleCareProducts($cursor: String) {
+    products(first: 100, after: $cursor) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        id
+        title
+        productType
+        tags
+        status
+        variants(first: 50) {
+          nodes {
+            id
+            title
+            sku
+            price
+            availableForSale
+          }
+        }
+      }
+    }
+  }
+`;
+
 function getBoolean(formData, name) {
   return formData.get(name) === "on";
 }
@@ -36,6 +63,181 @@ async function assertNoActiveDuplicate({ shop, shopifyVariantId, excludeId }) {
   if (duplicate) {
     throw new Error("This Shopify variant already has an active AppleCare mapping.");
   }
+}
+
+function isAppleCareProduct(product) {
+  const title = product.title.toLowerCase();
+  const productType = String(product.productType || "").toLowerCase();
+  const tags = product.tags.map((tag) => tag.toLowerCase());
+
+  return (
+    title.startsWith("applecare+") ||
+    productType === "extended warranties" ||
+    tags.some(
+      (tag) =>
+        tag.includes("applecare") ||
+        tag.includes("apple-care") ||
+        tag.includes("extended-warrant"),
+    )
+  );
+}
+
+function normalizeModelText(value) {
+  return clean(value)
+    .toLowerCase()
+    .replace(/applecare\+/g, "")
+    .replace(/\bfor\b/g, " ")
+    .replace(/\+/g, " ")
+    .replace(/[()]/g, " ")
+    .replace(/\b\d+\s*(gb|tb)\b/g, " ")
+    .replace(/\b\d+\s*gb\s*ram\b/g, " ")
+    .replace(/\bwi[-\s]?fi\b/g, " ")
+    .replace(/\bcellular\b/g, " ")
+    .replace(/\bspace\b|\bgray\b|\bgrey\b|\bsilver\b|\bstarlight\b|\bmidnight\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getModelTokens(value) {
+  return normalizeModelText(value)
+    .split(" ")
+    .filter((token) => token.length > 1 || /^[0-9]$/.test(token));
+}
+
+function tokenSetContainsAll(haystackTokens, needleTokens) {
+  const haystack = new Set(haystackTokens);
+  return needleTokens.length > 0 && needleTokens.every((token) => haystack.has(token));
+}
+
+function findAppleCareMatches(mainProduct, appleCareProducts) {
+  const mainTokens = getModelTokens(mainProduct.title);
+  const variantTokens = mainProduct.variants.nodes.flatMap((variant) =>
+    getModelTokens(`${mainProduct.title} ${variant.title}`),
+  );
+  const allMainTokens = [...new Set([...mainTokens, ...variantTokens])];
+
+  return appleCareProducts.filter((appleCareProduct) => {
+    const appleCareTokens = getModelTokens(appleCareProduct.title);
+    return (
+      tokenSetContainsAll(allMainTokens, appleCareTokens) ||
+      tokenSetContainsAll(appleCareTokens, mainTokens)
+    );
+  });
+}
+
+function getSinglePurchasableVariant(product) {
+  const purchasableVariants = product.variants.nodes.filter(
+    (variant) => variant.availableForSale,
+  );
+
+  if (purchasableVariants.length === 1) return purchasableVariants[0];
+
+  return null;
+}
+
+async function fetchShopifyProducts(admin) {
+  const products = [];
+  let cursor = null;
+
+  do {
+    const response = await admin.graphql(PRODUCT_QUERY, {
+      variables: { cursor },
+    });
+    const payload = await response.json();
+
+    if (payload.errors) {
+      throw new Error("Shopify product fetch failed.");
+    }
+
+    products.push(...payload.data.products.nodes);
+    cursor = payload.data.products.pageInfo.hasNextPage
+      ? payload.data.products.pageInfo.endCursor
+      : null;
+  } while (cursor);
+
+  return products;
+}
+
+async function autoGenerateMappings({ admin, shop }) {
+  const products = await fetchShopifyProducts(admin);
+  const appleCareProducts = products.filter(isAppleCareProduct);
+  const mainProducts = products.filter((product) => !isAppleCareProduct(product));
+  const activeMappings = await prisma.appleCareProductMapping.findMany({
+    where: { shop, isActive: true },
+    select: { shopifyVariantId: true },
+  });
+  const mappedVariantIds = new Set(
+    activeMappings.map((mapping) => mapping.shopifyVariantId),
+  );
+
+  const summary = {
+    productsScanned: products.length,
+    appleCareProductsFound: appleCareProducts.length,
+    mappingsCreated: 0,
+    mappingsSkipped: 0,
+    unmatchedMainProducts: [],
+    ambiguousMatches: [],
+  };
+
+  for (const mainProduct of mainProducts) {
+    const matches = findAppleCareMatches(mainProduct, appleCareProducts);
+
+    if (matches.length === 0) {
+      summary.unmatchedMainProducts.push(mainProduct.title);
+      continue;
+    }
+
+    if (matches.length > 1) {
+      summary.ambiguousMatches.push({
+        mainProduct: mainProduct.title,
+        appleCareProducts: matches.map((match) => match.title),
+      });
+      continue;
+    }
+
+    const appleCareProduct = matches[0];
+    const appleCareVariant = getSinglePurchasableVariant(appleCareProduct);
+
+    if (!appleCareVariant) {
+      summary.ambiguousMatches.push({
+        mainProduct: mainProduct.title,
+        appleCareProducts: [
+          `${appleCareProduct.title} has ${appleCareProduct.variants.nodes.length} variants`,
+        ],
+      });
+      continue;
+    }
+
+    for (const mainVariant of mainProduct.variants.nodes) {
+      if (mappedVariantIds.has(mainVariant.id)) {
+        summary.mappingsSkipped += 1;
+        continue;
+      }
+
+      await prisma.appleCareProductMapping.create({
+        data: {
+          shop,
+          shopifyProductId: mainProduct.id,
+          shopifyProductTitle: mainProduct.title,
+          shopifyVariantId: mainVariant.id,
+          shopifyVariantTitle: mainVariant.title || null,
+          shopifySku: mainVariant.sku || null,
+          appleCareProductId: appleCareProduct.id,
+          appleCareProductTitle: appleCareProduct.title,
+          appleCareVariantId: appleCareVariant.id,
+          appleCareVariantTitle: appleCareVariant.title || null,
+          appleCareSku: appleCareVariant.sku || null,
+          appleCarePriceSnapshot: appleCareVariant.price,
+          isActive: true,
+        },
+      });
+      mappedVariantIds.add(mainVariant.id);
+      summary.mappingsCreated += 1;
+    }
+  }
+
+  return summary;
 }
 
 function getMappingInput(formData) {
@@ -103,11 +305,20 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
   try {
+    if (intent === "autoGenerate") {
+      const summary = await autoGenerateMappings({ admin, shop: session.shop });
+      return {
+        ok: true,
+        message: `Auto-generated ${summary.mappingsCreated} mappings. Skipped ${summary.mappingsSkipped}.`,
+        summary,
+      };
+    }
+
     if (intent === "create") {
       const input = getMappingInput(formData);
 
@@ -291,6 +502,35 @@ export default function MappingsPage() {
           {actionData.message}
         </s-banner>
       ) : null}
+
+      {actionData?.summary ? (
+        <s-section heading="Auto-generation result">
+          <s-stack gap="small">
+            <s-paragraph>Products scanned: {actionData.summary.productsScanned}</s-paragraph>
+            <s-paragraph>
+              AppleCare products found: {actionData.summary.appleCareProductsFound}
+            </s-paragraph>
+            <s-paragraph>Mappings created: {actionData.summary.mappingsCreated}</s-paragraph>
+            <s-paragraph>Mappings skipped: {actionData.summary.mappingsSkipped}</s-paragraph>
+            <s-paragraph>
+              Unmatched main products: {actionData.summary.unmatchedMainProducts.length}
+            </s-paragraph>
+            <s-paragraph>
+              Ambiguous matches: {actionData.summary.ambiguousMatches.length}
+            </s-paragraph>
+          </s-stack>
+        </s-section>
+      ) : null}
+
+      <s-section heading="Auto-generate mappings">
+        <Form method="post">
+          <input type="hidden" name="intent" value="autoGenerate" />
+          <s-paragraph>
+            Matches main Shopify variants to existing AppleCare Shopify variants without overwriting active mappings.
+          </s-paragraph>
+          <button type="submit">Auto-generate mappings</button>
+        </Form>
+      </s-section>
 
       <s-section heading="Create mapping">
         <Form method="post">

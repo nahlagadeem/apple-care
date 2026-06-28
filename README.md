@@ -80,3 +80,7 @@ The first mapping UI uses manual Shopify product and variant entry. Each mapping
 The mapped AppleCare Shopify variant price is the checkout source of truth. `appleCarePriceSnapshot` is optional reference data for admin review only.
 
 The database and server action enforce one active AppleCare mapping per shop and main Shopify variant.
+
+The `/app/mappings` page also includes an auto-generation action. It fetches Shopify products through the Admin API, identifies AppleCare products when the title starts with `AppleCare+`, product type is `Extended Warranties`, or tags include AppleCare naming, then excludes those products from the main product set.
+
+Auto-generation normalizes product/model text by removing AppleCare wording, storage/capacity text, punctuation, and common color/channel words. A main product is mapped only when exactly one AppleCare product matches the normalized model tokens and that AppleCare product has exactly one purchasable variant. Existing active mappings are skipped and never overwritten by auto-generation.
