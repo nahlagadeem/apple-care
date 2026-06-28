@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "REPLACE_WITH_SHOPIFY_CLIENT_ID"
+client_id = "caa018301184b4369ac1125f87544f6c"
 name = "Apple Care"
 application_url = "https://apple-care-m216.onrender.com"
 embedded = true
