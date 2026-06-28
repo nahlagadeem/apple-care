@@ -85,6 +85,7 @@ function isAppleCareProduct(product) {
 function normalizeModelText(value) {
   return clean(value)
     .toLowerCase()
+    .replace(/(\d+)[-\s]?inch/g, "$1 inch")
     .replace(/applecare\+/g, "")
     .replace(/\bfor\b/g, " ")
     .replace(/\+/g, " ")
@@ -99,31 +100,161 @@ function normalizeModelText(value) {
     .trim();
 }
 
+const PRODUCT_FAMILIES = [
+  "macbook air",
+  "macbook pro",
+  "macbook neo",
+  "ipad air",
+  "ipad pro",
+  "ipad mini",
+  "ipad",
+  "apple watch",
+  "apple tv",
+  "imac",
+];
+
+const ACCESSORY_TERMS = [
+  "adapter",
+  "airpods",
+  "band",
+  "case",
+  "cable",
+  "charger",
+  "cover",
+  "keyboard",
+  "mouse",
+  "pencil",
+  "sleeve",
+  "strap",
+];
+
 function getModelTokens(value) {
   return normalizeModelText(value)
     .split(" ")
     .filter((token) => token.length > 1 || /^[0-9]$/.test(token));
 }
 
-function tokenSetContainsAll(haystackTokens, needleTokens) {
-  const haystack = new Set(haystackTokens);
-  return needleTokens.length > 0 && needleTokens.every((token) => haystack.has(token));
+function isAccessoryLikeProduct(product) {
+  const text = normalizeModelText(`${product.title} ${product.productType}`);
+  return ACCESSORY_TERMS.some((term) => text.includes(term));
 }
 
-function findAppleCareMatches(mainProduct, appleCareProducts) {
-  const mainTokens = getModelTokens(mainProduct.title);
-  const variantTokens = mainProduct.variants.nodes.flatMap((variant) =>
-    getModelTokens(`${mainProduct.title} ${variant.title}`),
-  );
-  const allMainTokens = [...new Set([...mainTokens, ...variantTokens])];
+function getProductFamily(text) {
+  return PRODUCT_FAMILIES.find((family) => text.includes(family)) || "";
+}
 
-  return appleCareProducts.filter((appleCareProduct) => {
-    const appleCareTokens = getModelTokens(appleCareProduct.title);
-    return (
-      tokenSetContainsAll(allMainTokens, appleCareTokens) ||
-      tokenSetContainsAll(appleCareTokens, mainTokens)
-    );
-  });
+function uniqueMatches(text, pattern, normalizer = (value) => value) {
+  return [...new Set([...text.matchAll(pattern)].map((match) => normalizer(match[0])))];
+}
+
+function getModelProfile(value) {
+  const text = normalizeModelText(value);
+  return {
+    text,
+    family: getProductFamily(text),
+    sizes: uniqueMatches(text, /\b\d{1,2}\s*inch\b/g, (value) =>
+      value.replace(/\s+/g, "-"),
+    ),
+    chips: uniqueMatches(text, /\b(?:m\d+|a\d+(?:\s+pro)?)\b/g, (value) =>
+      value.replace(/\s+/g, "-"),
+    ),
+    series: uniqueMatches(text, /\bseries\s+\d+\b/g, (value) =>
+      value.replace(/\s+/g, "-"),
+    ),
+    tokens: getModelTokens(value),
+  };
+}
+
+function intersects(left, right) {
+  return left.some((value) => right.includes(value));
+}
+
+function getTokenOverlapScore(mainTokens, appleCareTokens) {
+  const mainSet = new Set(mainTokens);
+  const overlap = appleCareTokens.filter((token) => mainSet.has(token)).length;
+  return overlap * 5;
+}
+
+function scoreAppleCareMatch(mainProfile, appleCareProfile) {
+  if (!mainProfile.family || mainProfile.family !== appleCareProfile.family) {
+    return 0;
+  }
+
+  let score = 100;
+  let strongSignals = 0;
+
+  if (appleCareProfile.sizes.length > 0) {
+    if (!intersects(mainProfile.sizes, appleCareProfile.sizes)) return 0;
+    score += 60;
+    strongSignals += 1;
+  }
+
+  if (appleCareProfile.chips.length > 0) {
+    if (!intersects(mainProfile.chips, appleCareProfile.chips)) return 0;
+    score += 80;
+    strongSignals += 1;
+  }
+
+  if (appleCareProfile.series.length > 0) {
+    if (!intersects(mainProfile.series, appleCareProfile.series)) return 0;
+    score += 80;
+    strongSignals += 1;
+  }
+
+  if (mainProfile.family === "apple tv") {
+    score += 80;
+    strongSignals += 1;
+  }
+
+  score += getTokenOverlapScore(mainProfile.tokens, appleCareProfile.tokens);
+  return strongSignals > 0 ? score : 0;
+}
+
+function findAppleCareMatch(mainProduct, appleCareProducts) {
+  if (isAccessoryLikeProduct(mainProduct)) {
+    return {
+      status: "skipped",
+      reason: "Accessory-like product; left for manual mapping.",
+      matches: [],
+    };
+  }
+
+  const mainText = [
+    mainProduct.title,
+    ...mainProduct.variants.nodes.map((variant) => variant.title),
+  ].join(" ");
+  const mainProfile = getModelProfile(mainText);
+  const scoredMatches = appleCareProducts
+    .map((appleCareProduct) => ({
+      product: appleCareProduct,
+      score: scoreAppleCareMatch(
+        mainProfile,
+        getModelProfile(appleCareProduct.title),
+      ),
+    }))
+    .filter((match) => match.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  if (scoredMatches.length === 0) {
+    return {
+      status: "unmatched",
+      reason: mainProfile.family
+        ? "No AppleCare product matched the required model signals."
+        : "No supported AppleCare product family detected.",
+      matches: [],
+    };
+  }
+
+  const [bestMatch, secondMatch] = scoredMatches;
+  if (secondMatch && secondMatch.score === bestMatch.score) {
+    return {
+      status: "ambiguous",
+      reason: "Multiple AppleCare products have the same confidence score.",
+      matches: scoredMatches.filter((match) => match.score === bestMatch.score),
+    };
+  }
+
+  return { status: "matched", match: bestMatch.product, score: bestMatch.score };
 }
 
 function getSinglePurchasableVariant(product) {
@@ -178,32 +309,52 @@ async function autoGenerateMappings({ admin, shop }) {
     mappingsSkipped: 0,
     unmatchedMainProducts: [],
     ambiguousMatches: [],
+    skippedDetails: [],
   };
 
   for (const mainProduct of mainProducts) {
-    const matches = findAppleCareMatches(mainProduct, appleCareProducts);
+    const matchResult = findAppleCareMatch(mainProduct, appleCareProducts);
 
-    if (matches.length === 0) {
-      summary.unmatchedMainProducts.push(mainProduct.title);
-      continue;
-    }
-
-    if (matches.length > 1) {
-      summary.ambiguousMatches.push({
+    if (matchResult.status === "skipped") {
+      summary.skippedDetails.push({
         mainProduct: mainProduct.title,
-        appleCareProducts: matches.map((match) => match.title),
+        reason: matchResult.reason,
       });
       continue;
     }
 
-    const appleCareProduct = matches[0];
+    if (matchResult.status === "unmatched") {
+      summary.unmatchedMainProducts.push({
+        mainProduct: mainProduct.title,
+        reason: matchResult.reason,
+      });
+      continue;
+    }
+
+    if (matchResult.status === "ambiguous") {
+      summary.ambiguousMatches.push({
+        mainProduct: mainProduct.title,
+        reason: matchResult.reason,
+        appleCareProducts: matchResult.matches.map((match) => ({
+          title: match.product.title,
+          score: match.score,
+        })),
+      });
+      continue;
+    }
+
+    const appleCareProduct = matchResult.match;
     const appleCareVariant = getSinglePurchasableVariant(appleCareProduct);
 
     if (!appleCareVariant) {
       summary.ambiguousMatches.push({
         mainProduct: mainProduct.title,
+        reason: "AppleCare product does not have exactly one purchasable variant.",
         appleCareProducts: [
-          `${appleCareProduct.title} has ${appleCareProduct.variants.nodes.length} variants`,
+          {
+            title: `${appleCareProduct.title} has ${appleCareProduct.variants.nodes.length} variants`,
+            score: matchResult.score,
+          },
         ],
       });
       continue;
@@ -212,6 +363,11 @@ async function autoGenerateMappings({ admin, shop }) {
     for (const mainVariant of mainProduct.variants.nodes) {
       if (mappedVariantIds.has(mainVariant.id)) {
         summary.mappingsSkipped += 1;
+        summary.skippedDetails.push({
+          mainProduct: mainProduct.title,
+          mainVariant: mainVariant.title || mainVariant.id,
+          reason: "Active mapping already exists for this main variant.",
+        });
         continue;
       }
 
@@ -518,7 +674,55 @@ export default function MappingsPage() {
             <s-paragraph>
               Ambiguous matches: {actionData.summary.ambiguousMatches.length}
             </s-paragraph>
+            <s-paragraph>
+              Skipped details: {actionData.summary.skippedDetails?.length || 0}
+            </s-paragraph>
           </s-stack>
+
+          {actionData.summary.unmatchedMainProducts.length > 0 ? (
+            <s-box>
+              <s-heading>Unmatched main products</s-heading>
+              <s-unordered-list>
+                {actionData.summary.unmatchedMainProducts.map((item) => (
+                  <s-list-item key={item.mainProduct}>
+                    {item.mainProduct} - {item.reason}
+                  </s-list-item>
+                ))}
+              </s-unordered-list>
+            </s-box>
+          ) : null}
+
+          {actionData.summary.ambiguousMatches.length > 0 ? (
+            <s-box>
+              <s-heading>Ambiguous matches</s-heading>
+              <s-unordered-list>
+                {actionData.summary.ambiguousMatches.map((item) => (
+                  <s-list-item key={item.mainProduct}>
+                    {item.mainProduct} - {item.reason}:{" "}
+                    {item.appleCareProducts
+                      .map((candidate) => `${candidate.title} (${candidate.score})`)
+                      .join(", ")}
+                  </s-list-item>
+                ))}
+              </s-unordered-list>
+            </s-box>
+          ) : null}
+
+          {actionData.summary.skippedDetails?.length > 0 ? (
+            <s-box>
+              <s-heading>Skipped mappings</s-heading>
+              <s-unordered-list>
+                {actionData.summary.skippedDetails.map((item) => (
+                  <s-list-item
+                    key={`${item.mainProduct}-${item.mainVariant || item.reason}`}
+                  >
+                    {item.mainProduct}
+                    {item.mainVariant ? ` / ${item.mainVariant}` : ""} - {item.reason}
+                  </s-list-item>
+                ))}
+              </s-unordered-list>
+            </s-box>
+          ) : null}
         </s-section>
       ) : null}
 
