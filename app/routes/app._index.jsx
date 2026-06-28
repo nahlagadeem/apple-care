@@ -21,7 +21,7 @@ export default function AppHome() {
               <s-list-item>Excel import script</s-list-item>
               <s-list-item>Admin Pricing page</s-list-item>
               <s-list-item>Main variant to AppleCare Shopify variant mapping page</s-list-item>
-              <s-list-item>Admin auto-generation for AppleCare mappings</s-list-item>
+              <s-list-item>Approved product-pair seed mappings</s-list-item>
             </s-unordered-list>
           </s-box>
 
