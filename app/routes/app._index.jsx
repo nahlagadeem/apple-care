@@ -10,9 +10,31 @@ export default function AppHome() {
   return (
     <s-page heading="Apple Care">
       <s-section heading="Status">
-        <s-paragraph>
-          Apple Care app scaffold is ready. Pricing import, product mapping, cart logic, and storefront UI are intentionally not implemented yet.
-        </s-paragraph>
+        <s-stack gap="base">
+          <s-box>
+            <s-heading>Implemented</s-heading>
+            <s-unordered-list>
+              <s-list-item>Shopify app scaffold</s-list-item>
+              <s-list-item>Render deployment</s-list-item>
+              <s-list-item>Prisma PostgreSQL setup</s-list-item>
+              <s-list-item>AppleCarePricing model and migration</s-list-item>
+              <s-list-item>Excel import script</s-list-item>
+              <s-list-item>Admin Pricing page</s-list-item>
+            </s-unordered-list>
+          </s-box>
+
+          <s-box>
+            <s-heading>Not implemented yet</s-heading>
+            <s-unordered-list>
+              <s-list-item>Product-to-AppleCare mapping</s-list-item>
+              <s-list-item>Storefront product page UI</s-list-item>
+              <s-list-item>Product card UI</s-list-item>
+              <s-list-item>Cart add-on logic</s-list-item>
+              <s-list-item>Checkout behavior</s-list-item>
+              <s-list-item>Shopify AppleCare products and variants</s-list-item>
+            </s-unordered-list>
+          </s-box>
+        </s-stack>
       </s-section>
     </s-page>
   );
