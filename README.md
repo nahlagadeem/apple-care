@@ -2,14 +2,17 @@
 
 Shopify app scaffold for adding AppleCare as an optional paid cart and checkout item.
 
-This initial scaffold intentionally includes only the installable Shopify app foundation:
+This initial scaffold includes the installable Shopify app foundation and pricing data storage:
 
 - React Router Shopify app runtime
 - Prisma session storage
 - Shopify app proxy configuration
 - Render-compatible Docker/start scripts
+- AppleCare pricing Prisma model and migration
+- Committed AppleCare pricing seed file
+- Admin pricing page at `/app/pricing`
 
-AppleCare pricing import, product mapping, cart logic, checkout behavior, and storefront UI are not implemented in this initial task.
+Product mapping, cart logic, checkout behavior, and storefront UI are not implemented yet.
 
 ## Deployment Pattern
 
@@ -53,6 +56,14 @@ npm run prisma:migrate
 npm run import:pricing
 ```
 
-The import reads `APPLE_CARE_PRICING_FILE` or accepts the workbook path as the first command argument.
+On Render, run the production seed import with:
 
-For local import testing, set `APPLE_CARE_PRICING_FILE` in a private local `.env` or shell. Do not commit local file paths or database secrets.
+```bash
+npm run import:pricing
+```
+
+The command defaults to the committed non-secret seed file at `prisma/apple-care-pricing.seed.json`, so it does not need the Desktop Excel file in production. The import uses `partNumber` upserts, so re-running the command updates the same 13 rows and does not create duplicates.
+
+For local Excel import testing, set `APPLE_CARE_PRICING_FILE` in a private local `.env` or shell, or pass the workbook path as the first command argument. Do not commit local file paths or database secrets.
+
+`npm run import:pricing:seed` is kept as an alias for the same seed-backed importer, but the Render command is `npm run import:pricing`.
