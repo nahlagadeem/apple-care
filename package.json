@@ -14,6 +14,7 @@
     "setup": "prisma generate && prisma migrate deploy",
     "prisma:migrate": "prisma migrate deploy",
     "import:pricing": "node scripts/import-apple-care-pricing.mjs",
+    "import:pricing:seed": "node scripts/import-apple-care-pricing.mjs",
     "lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
     "shopify": "shopify",
     "prisma": "prisma",

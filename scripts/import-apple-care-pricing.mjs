@@ -1,11 +1,18 @@
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
 import { PrismaClient, Prisma } from "@prisma/client";
 import xlsx from "xlsx";
 
-const { readFile, utils } = xlsx;
+const { readFile: readWorkbook, utils } = xlsx;
 
 const prisma = new PrismaClient();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const defaultSeedPath = path.resolve(
+  __dirname,
+  "../prisma/apple-care-pricing.seed.json",
+);
 
 function normalizeHeader(value) {
   return String(value || "")
@@ -31,12 +38,25 @@ function normalizeDecimal(value, fieldName, rowNumber) {
   return new Prisma.Decimal(numeric.toFixed(4));
 }
 
+function normalizeSeedDecimal(value, fieldName, rowNumber) {
+  if (value === null || value === undefined || value === "") {
+    throw new Error(`Missing ${fieldName} at seed row ${rowNumber}`);
+  }
+
+  const decimal = new Prisma.Decimal(value);
+  if (decimal.isNegative()) {
+    throw new Error(`Invalid negative ${fieldName} at seed row ${rowNumber}: ${value}`);
+  }
+
+  return decimal.toDecimalPlaces(4);
+}
+
 function getCell(row, columnIndex) {
   return row[columnIndex];
 }
 
 function readPricingRows(filePath) {
-  const workbook = readFile(filePath, { cellDates: false });
+  const workbook = readWorkbook(filePath, { cellDates: false });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) {
     throw new Error("Workbook does not contain any sheets.");
@@ -95,16 +115,52 @@ function readPricingRows(filePath) {
     .filter(Boolean);
 }
 
-async function main() {
-  const rawFilePath = process.argv[2] || process.env.APPLE_CARE_PRICING_FILE;
-  if (!rawFilePath) {
-    throw new Error(
-      "Missing AppleCare pricing workbook path. Set APPLE_CARE_PRICING_FILE or pass the path as the first argument.",
-    );
+async function readSeedRows(seedPath) {
+  const contents = await readFile(seedPath, "utf8");
+  const seedRows = JSON.parse(contents);
+
+  if (!Array.isArray(seedRows)) {
+    throw new Error("Pricing seed must contain an array of rows.");
   }
 
-  const filePath = path.resolve(rawFilePath);
-  const pricingRows = readPricingRows(filePath);
+  return seedRows.map((row, index) => {
+    const rowNumber = index + 1;
+    const partNumber = String(row.partNumber || "").trim();
+    const description = String(row.description || "").trim();
+
+    if (!partNumber) throw new Error(`Missing partNumber at seed row ${rowNumber}`);
+    if (!description) throw new Error(`Missing description at seed row ${rowNumber}`);
+
+    return {
+      partNumber,
+      description,
+      sell: normalizeSeedDecimal(row.sell, "sell", rowNumber),
+      sellWithVat: normalizeSeedDecimal(row.sellWithVat, "sellWithVat", rowNumber),
+    };
+  });
+}
+
+function getImportSource() {
+  const rawFilePath = process.argv[2] || process.env.APPLE_CARE_PRICING_FILE;
+  if (rawFilePath) {
+    return {
+      type: "excel",
+      path: path.resolve(rawFilePath),
+    };
+  }
+
+  return {
+    type: "seed",
+    path: defaultSeedPath,
+  };
+}
+
+async function main() {
+  const source = getImportSource();
+  const pricingRows =
+    source.type === "excel"
+      ? readPricingRows(source.path)
+      : await readSeedRows(source.path);
 
   let upserted = 0;
   for (const row of pricingRows) {
@@ -124,7 +180,8 @@ async function main() {
     JSON.stringify(
       {
         ok: true,
-        filePath,
+        sourceType: source.type,
+        sourcePath: source.path,
         rowsRead: pricingRows.length,
         rowsUpserted: upserted,
       },
