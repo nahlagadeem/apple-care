@@ -82,6 +82,25 @@ function isAppleCareProduct(product) {
   );
 }
 
+function getShopifyNumericId(gid) {
+  const match = String(gid || "").match(/(\d+)(?:\D*)$/);
+  return match ? Number(match[1]) : 0;
+}
+
+function getStatusRank(status) {
+  switch (String(status || "").toUpperCase()) {
+    case "ACTIVE":
+    case "UNLISTED":
+      return 3;
+    case "DRAFT":
+      return 2;
+    case "ARCHIVED":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 function normalizeModelText(value) {
   return clean(value)
     .toLowerCase()
@@ -136,6 +155,11 @@ function getModelTokens(value) {
 
 function isAccessoryLikeProduct(product) {
   const text = normalizeModelText(`${product.title} ${product.productType}`);
+  const family = getProductFamily(text);
+  if (family === "apple watch") {
+    return false;
+  }
+
   return ACCESSORY_TERMS.some((term) => text.includes(term));
 }
 
@@ -206,8 +230,27 @@ function scoreAppleCareMatch(mainProfile, appleCareProfile) {
     strongSignals += 1;
   }
 
+  if (mainProfile.text === appleCareProfile.text) {
+    score += 120;
+    strongSignals += 1;
+  } else if (
+    mainProfile.text.includes(appleCareProfile.text) ||
+    appleCareProfile.text.includes(mainProfile.text)
+  ) {
+    score += 60;
+    strongSignals += 1;
+  }
+
   score += getTokenOverlapScore(mainProfile.tokens, appleCareProfile.tokens);
   return strongSignals > 0 ? score : 0;
+}
+
+function pickPreferredAppleCareProduct(products) {
+  return [...products].sort((left, right) => {
+    const statusDiff = getStatusRank(right.status) - getStatusRank(left.status);
+    if (statusDiff !== 0) return statusDiff;
+    return getShopifyNumericId(right.id) - getShopifyNumericId(left.id);
+  })[0];
 }
 
 function findAppleCareMatch(mainProduct, appleCareProducts) {
@@ -227,6 +270,7 @@ function findAppleCareMatch(mainProduct, appleCareProducts) {
   const scoredMatches = appleCareProducts
     .map((appleCareProduct) => ({
       product: appleCareProduct,
+      profile: getModelProfile(appleCareProduct.title),
       score: scoreAppleCareMatch(
         mainProfile,
         getModelProfile(appleCareProduct.title),
@@ -245,21 +289,70 @@ function findAppleCareMatch(mainProduct, appleCareProducts) {
     };
   }
 
-  const [bestMatch, secondMatch] = scoredMatches;
-  if (secondMatch && secondMatch.score === bestMatch.score) {
+  const groupedByScore = new Map();
+  for (const match of scoredMatches) {
+    const key = `${match.score}:${match.profile.text}`;
+    const existing = groupedByScore.get(key) || [];
+    existing.push(match);
+    groupedByScore.set(key, existing);
+  }
+
+  const bestScore = scoredMatches[0].score;
+  const bestScoreMatches = scoredMatches.filter((match) => match.score === bestScore);
+  const dedupedBestMatches = [];
+  const duplicateResolutions = [];
+
+  for (const [key, matches] of groupedByScore.entries()) {
+    const [score] = key.split(":");
+    if (Number(score) !== bestScore) continue;
+
+    if (matches.length === 1) {
+      dedupedBestMatches.push(matches[0]);
+      continue;
+    }
+
+    const preferred = pickPreferredAppleCareProduct(matches.map((match) => match.product));
+    const chosen = matches.find((match) => match.product.id === preferred.id) || matches[0];
+    dedupedBestMatches.push(chosen);
+    duplicateResolutions.push({
+      title: chosen.product.title,
+      chosenProductId: chosen.product.id,
+      chosenStatus: chosen.product.status,
+      duplicateCount: matches.length,
+      candidates: matches.map((match) => ({
+        id: match.product.id,
+        status: match.product.status,
+      })),
+    });
+  }
+
+  if (dedupedBestMatches.length > 1) {
     return {
       status: "ambiguous",
       reason: "Multiple AppleCare products have the same confidence score.",
-      matches: scoredMatches.filter((match) => match.score === bestMatch.score),
+      matches: bestScoreMatches.map((match) => ({
+        product: match.product,
+        score: match.score,
+      })),
     };
   }
 
-  return { status: "matched", match: bestMatch.product, score: bestMatch.score };
+  const bestMatch = dedupedBestMatches[0];
+  return {
+    status: "matched",
+    match: bestMatch.product,
+    score: bestMatch.score,
+    duplicateResolutions,
+  };
 }
 
 function getSinglePurchasableVariant(product) {
+  if (product.variants.nodes.length === 1) {
+    return product.variants.nodes[0];
+  }
+
   const purchasableVariants = product.variants.nodes.filter(
-    (variant) => variant.availableForSale,
+    (variant) => variant.availableForSale !== false,
   );
 
   if (purchasableVariants.length === 1) return purchasableVariants[0];
@@ -310,6 +403,7 @@ async function autoGenerateMappings({ admin, shop }) {
     unmatchedMainProducts: [],
     ambiguousMatches: [],
     skippedDetails: [],
+    duplicateResolutions: [],
   };
 
   for (const mainProduct of mainProducts) {
@@ -346,10 +440,19 @@ async function autoGenerateMappings({ admin, shop }) {
     const appleCareProduct = matchResult.match;
     const appleCareVariant = getSinglePurchasableVariant(appleCareProduct);
 
+    if (matchResult.duplicateResolutions?.length > 0) {
+      summary.duplicateResolutions.push(
+        ...matchResult.duplicateResolutions.map((item) => ({
+          mainProduct: mainProduct.title,
+          ...item,
+        })),
+      );
+    }
+
     if (!appleCareVariant) {
       summary.ambiguousMatches.push({
         mainProduct: mainProduct.title,
-        reason: "AppleCare product does not have exactly one purchasable variant.",
+        reason: "AppleCare product does not have exactly one usable variant.",
         appleCareProducts: [
           {
             title: `${appleCareProduct.title} has ${appleCareProduct.variants.nodes.length} variants`,
@@ -677,6 +780,9 @@ export default function MappingsPage() {
             <s-paragraph>
               Skipped details: {actionData.summary.skippedDetails?.length || 0}
             </s-paragraph>
+            <s-paragraph>
+              Duplicate AppleCare selections: {actionData.summary.duplicateResolutions?.length || 0}
+            </s-paragraph>
           </s-stack>
 
           {actionData.summary.unmatchedMainProducts.length > 0 ? (
@@ -718,6 +824,22 @@ export default function MappingsPage() {
                   >
                     {item.mainProduct}
                     {item.mainVariant ? ` / ${item.mainVariant}` : ""} - {item.reason}
+                  </s-list-item>
+                ))}
+              </s-unordered-list>
+            </s-box>
+          ) : null}
+
+          {actionData.summary.duplicateResolutions?.length > 0 ? (
+            <s-box>
+              <s-heading>Duplicate AppleCare selections</s-heading>
+              <s-unordered-list>
+                {actionData.summary.duplicateResolutions.map((item) => (
+                  <s-list-item
+                    key={`${item.mainProduct}-${item.title}-${item.chosenProductId}`}
+                  >
+                    {item.mainProduct} - chose {item.title} ({item.chosenStatus}) from{" "}
+                    {item.duplicateCount} equivalent candidates.
                   </s-list-item>
                 ))}
               </s-unordered-list>
