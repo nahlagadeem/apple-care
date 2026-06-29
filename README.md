@@ -111,3 +111,16 @@ Example responses:
 ```
 
 Theme JavaScript can fetch this endpoint directly through the configured app proxy without Shopify admin auth.
+
+## Storefront Product Add-on Block
+
+The product-page add-on is delivered as a theme app extension block in `extensions/apple-care-addon`.
+
+To enable it in Shopify:
+
+1. Open the theme editor.
+2. Open a product template.
+3. Add the `Apple Care Add-on` app block.
+4. Place it under the product details or accordion area.
+
+The block reads the currently selected product variant from the product form, calls the lookup API, shows the AppleCare card only when a mapping exists, and updates when the variant changes. Cart and checkout behavior are not wired yet.

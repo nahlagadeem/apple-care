@@ -1,0 +1,270 @@
+{% assign apple_care_variant = product.selected_or_first_available_variant | default: product.variants.first %}
+
+<style>
+  .apple-care-addon {
+    margin-top: 1.5rem;
+  }
+
+  .apple-care-addon[hidden] {
+    display: none !important;
+  }
+
+  .apple-care-addon__card {
+    border: 1px solid rgba(18, 18, 18, 0.12);
+    border-radius: 8px;
+    background: #fff;
+    padding: 1rem;
+  }
+
+  .apple-care-addon__eyebrow {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    color: rgba(18, 18, 18, 0.62);
+    margin-bottom: 0.25rem;
+  }
+
+  .apple-care-addon__title {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.25rem;
+    font-weight: 600;
+    color: rgb(18, 18, 18);
+  }
+
+  .apple-care-addon__product {
+    margin: 0.35rem 0 0;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    color: rgba(18, 18, 18, 0.86);
+  }
+
+  .apple-care-addon__price {
+    margin: 0.35rem 0 0;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    font-weight: 600;
+    color: rgb(18, 18, 18);
+  }
+
+  .apple-care-addon__text {
+    margin: 0.6rem 0 0;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    color: rgba(18, 18, 18, 0.76);
+  }
+
+  .apple-care-addon__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.8rem;
+    font-size: 0.95rem;
+    line-height: 1.35;
+    color: rgb(18, 18, 18);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .apple-care-addon__toggle input {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    accent-color: rgb(18, 18, 18);
+  }
+</style>
+
+<div
+  class="apple-care-addon"
+  data-apple-care-addon
+  data-lookup-url="/apps/apple-care/lookup"
+  data-initial-variant-id="{{ apple_care_variant.id }}"
+  hidden
+>
+  <div class="apple-care-addon__card">
+    <div class="apple-care-addon__eyebrow">Add-on</div>
+    <h3 class="apple-care-addon__title">AppleCare+</h3>
+    <p class="apple-care-addon__product" data-apple-care-product-title></p>
+    <p class="apple-care-addon__price" data-apple-care-price></p>
+    <p class="apple-care-addon__text">Get additional coverage and support for your device.</p>
+    <label class="apple-care-addon__toggle">
+      <input type="checkbox" data-apple-care-toggle />
+      <span>Add AppleCare+</span>
+    </label>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const INIT_FLAG = "appleCareInitialized";
+    const LOOKUP_DELAY_MS = 100;
+    const POLL_INTERVAL_MS = 250;
+
+    const normalizeVariantId = (value) => {
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+
+      const gidMatch = raw.match(/^gid:\/\/shopify\/ProductVariant\/(\d+)$/);
+      if (gidMatch) return gidMatch[1];
+      if (/^\d+$/.test(raw)) return raw;
+
+      return "";
+    };
+
+    const findVariantInput = (root) => {
+      const form =
+        root.closest("form") ||
+        root.closest("section")?.querySelector('form[action*="/cart/add"]') ||
+        document.querySelector('form[action*="/cart/add"]');
+
+      if (!form) return null;
+
+      return form.querySelector('input[name="id"]');
+    };
+
+    const fetchAppleCare = async (lookupUrl, variantId) => {
+      const response = await fetch(`${lookupUrl}?variantId=${encodeURIComponent(variantId)}`, {
+        headers: {
+          Accept: "application/json",
+        },
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Lookup failed with status ${response.status}`);
+      }
+
+      return response.json();
+    };
+
+    const initRoot = (root) => {
+      if (root.dataset[INIT_FLAG] === "true") return;
+      root.dataset[INIT_FLAG] = "true";
+
+      const lookupUrl = root.dataset.lookupUrl;
+      const titleEl = root.querySelector("[data-apple-care-product-title]");
+      const priceEl = root.querySelector("[data-apple-care-price]");
+      const toggleEl = root.querySelector("[data-apple-care-toggle]");
+      const variantInput = findVariantInput(root);
+
+      let timerId = null;
+      let pollId = null;
+      let lastRequestedVariantId = "";
+
+      const setVisible = (visible) => {
+        root.hidden = !visible;
+      };
+
+      const render = (payload) => {
+        if (!payload?.ok || !payload.hasAppleCare) {
+          setVisible(false);
+          return;
+        }
+
+        const appleCare = payload.appleCare || {};
+        if (titleEl) titleEl.textContent = appleCare.productTitle || "AppleCare+";
+        if (priceEl) priceEl.textContent = appleCare.price || "";
+        if (toggleEl) toggleEl.checked = false;
+
+        setVisible(true);
+      };
+
+      const load = async () => {
+        const currentVariantId = normalizeVariantId(
+          variantInput?.value || root.dataset.initialVariantId,
+        );
+
+        if (!currentVariantId || currentVariantId === lastRequestedVariantId) {
+          return;
+        }
+
+        lastRequestedVariantId = currentVariantId;
+
+        try {
+          const payload = await fetchAppleCare(lookupUrl, currentVariantId);
+          render(payload);
+        } catch (error) {
+          setVisible(false);
+        }
+      };
+
+      const schedule = () => {
+        window.clearTimeout(timerId);
+        timerId = window.setTimeout(load, LOOKUP_DELAY_MS);
+      };
+
+      if (variantInput) {
+        variantInput.addEventListener("change", schedule);
+        variantInput.addEventListener("input", schedule);
+      }
+
+      document.addEventListener(
+        "change",
+        (event) => {
+          if (!variantInput?.form || !variantInput.form.contains(event.target)) return;
+          schedule();
+        },
+        true,
+      );
+
+      document.addEventListener(
+        "input",
+        (event) => {
+          if (!variantInput?.form || !variantInput.form.contains(event.target)) return;
+          schedule();
+        },
+        true,
+      );
+
+      document.addEventListener("variant:change", schedule);
+      document.addEventListener("product:variant-change", schedule);
+
+      if (toggleEl) {
+        toggleEl.addEventListener("change", () => {
+          // Visual selection only for now. Cart integration is coming later.
+        });
+      }
+
+      pollId = window.setInterval(() => {
+        const currentVariantId = normalizeVariantId(
+          variantInput?.value || root.dataset.initialVariantId,
+        );
+
+        if (currentVariantId && currentVariantId !== lastRequestedVariantId) {
+          schedule();
+        }
+      }, POLL_INTERVAL_MS);
+
+      schedule();
+
+      root.addEventListener("shopify:section:unload", () => {
+        window.clearTimeout(timerId);
+        window.clearInterval(pollId);
+      });
+    };
+
+    const initAll = (scope = document) => {
+      scope.querySelectorAll("[data-apple-care-addon]").forEach(initRoot);
+    };
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => initAll());
+    } else {
+      initAll();
+    }
+
+    document.addEventListener("shopify:section:load", (event) => {
+      initAll(event.target);
+    });
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Apple Care Add-on",
+  "target": "section",
+  "settings": []
+}
+{% endschema %}
