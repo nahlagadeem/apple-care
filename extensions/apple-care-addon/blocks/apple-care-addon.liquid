@@ -103,6 +103,7 @@
     const FORM_INIT_FLAG = "appleCareFormInitialized";
     const LOOKUP_DELAY_MS = 100;
     const POLL_INTERVAL_MS = 250;
+    const DEBUG_PREFIX = "[AppleCare Add-on]";
 
     const normalizeVariantId = (value) => {
       const raw = String(value || "").trim();
@@ -139,7 +140,13 @@
         throw new Error(`Lookup failed with status ${response.status}`);
       }
 
-      return response.json();
+      const payload = await response.json();
+      console.debug(DEBUG_PREFIX, "lookup response", {
+        variantId,
+        hasAppleCare: payload?.hasAppleCare,
+        appleCareVariantId: payload?.appleCare?.variantId,
+      });
+      return payload;
     };
 
     const getQuantity = (form) => {
@@ -223,6 +230,8 @@
         payload.sections_url = window.location.pathname;
       }
 
+      console.debug(DEBUG_PREFIX, "cart add payload", payload);
+
       const response = await fetch(getCartAddUrl(), {
         method: "POST",
         headers: {
@@ -233,6 +242,12 @@
       });
 
       const data = await response.json();
+      console.debug(DEBUG_PREFIX, "cart add response", {
+        ok: response.ok,
+        status: response.status,
+        response: data,
+      });
+
       if (!response.ok || data.status) {
         throw new Error(data.description || data.message || "Unable to add AppleCare to cart");
       }
@@ -244,42 +259,57 @@
       if (!form || form.dataset[FORM_INIT_FLAG] === "true") return;
       form.dataset[FORM_INIT_FLAG] = "true";
 
-      form.addEventListener(
-        "submit",
-        async (event) => {
-          if (!state.toggleEl?.checked || !state.appleCareVariantId || root.hidden) return;
+      const handleSubmit = async (event) => {
+        if (event.target !== form) return;
 
-          event.preventDefault();
-          event.stopImmediatePropagation();
+        console.debug(DEBUG_PREFIX, "submit observed", {
+          checked: Boolean(state.toggleEl?.checked),
+          appleCareVariantId: state.appleCareVariantId,
+          hidden: root.hidden,
+        });
 
-          const submitter = event.submitter;
-          const buttons = Array.from(
-            form.querySelectorAll('button[type="submit"], input[type="submit"]'),
-          );
+        if (!state.toggleEl?.checked || !state.appleCareVariantId || root.hidden) return;
 
+        event.preventDefault();
+        event.stopImmediatePropagation();
+
+        const submitter = event.submitter;
+        const buttons = Array.from(
+          form.querySelectorAll('button[type="submit"], input[type="submit"]'),
+        );
+
+        buttons.forEach((button) => {
+          button.disabled = true;
+          button.setAttribute("aria-busy", "true");
+        });
+
+        try {
+          await addBundleToCart(root, form, state);
+        } catch (error) {
+          console.error(DEBUG_PREFIX, error);
+          window.alert(error.message || "Unable to add AppleCare to cart");
+        } finally {
           buttons.forEach((button) => {
-            button.disabled = true;
-            button.setAttribute("aria-busy", "true");
+            button.disabled = false;
+            button.removeAttribute("aria-busy");
           });
 
-          try {
-            await addBundleToCart(root, form, state);
-          } catch (error) {
-            console.error(error);
-            window.alert(error.message || "Unable to add AppleCare to cart");
-          } finally {
-            buttons.forEach((button) => {
-              button.disabled = false;
-              button.removeAttribute("aria-busy");
-            });
-
-            if (submitter instanceof HTMLElement) {
-              submitter.focus();
-            }
+          if (submitter instanceof HTMLElement) {
+            submitter.focus();
           }
-        },
+        }
+      };
+
+      window.addEventListener(
+        "submit",
+        handleSubmit,
         true,
       );
+
+      root.addEventListener("shopify:section:unload", () => {
+        window.removeEventListener("submit", handleSubmit, true);
+        delete form.dataset[FORM_INIT_FLAG];
+      });
     };
 
     const initRoot = (root) => {
@@ -315,6 +345,10 @@
 
         const appleCare = payload.appleCare || {};
         state.appleCareVariantId = normalizeVariantId(appleCare.variantId);
+        console.debug(DEBUG_PREFIX, "mapped AppleCare variant", {
+          rawVariantId: appleCare.variantId,
+          numericVariantId: state.appleCareVariantId,
+        });
 
         if (!state.appleCareVariantId) {
           if (toggleEl) toggleEl.checked = false;
