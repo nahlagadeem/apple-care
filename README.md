@@ -84,3 +84,30 @@ The database and server action enforce one active AppleCare mapping per shop and
 The `/app/mappings` page includes an approved product-pair seed action. It clears the current mappings for the shop and reseeds the nine approved product pairs provided for this store. The manual mapping editor remains in place for review and exceptions.
 
 AppleCare variant price remains the checkout source of truth. The approved seed action stores the mapped AppleCare product/variant IDs, titles, SKUs, and a price snapshot for reference.
+
+## Storefront Lookup API
+
+The storefront should call the app proxy endpoint:
+
+```text
+/apps/apple-care/lookup?variantId=<numeric_id_or_gid>
+```
+
+Accepted `variantId` formats:
+
+- `1234567890`
+- `gid://shopify/ProductVariant/1234567890`
+
+The endpoint validates the Shopify app-proxy signature, resolves the current shop from the proxy request, and returns the active AppleCare mapping for the selected main Shopify variant.
+
+Example responses:
+
+```json
+{ "ok": true, "hasAppleCare": true, "appleCare": { "productId": "...", "productTitle": "...", "variantId": "...", "variantTitle": "...", "sku": "...", "price": "839.16" } }
+```
+
+```json
+{ "ok": true, "hasAppleCare": false }
+```
+
+Theme JavaScript can fetch this endpoint directly through the configured app proxy without Shopify admin auth.
