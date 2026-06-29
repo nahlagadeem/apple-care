@@ -80,6 +80,8 @@
   data-apple-care-addon
   data-lookup-url="/apps/apple-care/lookup"
   data-initial-variant-id="{{ apple_care_variant.id }}"
+  data-product-id="{{ product.id }}"
+  data-product-title="{{ product.title | escape }}"
   hidden
 >
   <div class="apple-care-addon__card">
@@ -98,6 +100,7 @@
 <script>
   (() => {
     const INIT_FLAG = "appleCareInitialized";
+    const FORM_INIT_FLAG = "appleCareFormInitialized";
     const LOOKUP_DELAY_MS = 100;
     const POLL_INTERVAL_MS = 250;
 
@@ -139,6 +142,146 @@
       return response.json();
     };
 
+    const getQuantity = (form) => {
+      const quantityInput = form.querySelector('input[name="quantity"], select[name="quantity"]');
+      const quantity = Number(quantityInput?.value || 1);
+      return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+    };
+
+    const getProperties = (form) => {
+      const properties = {};
+      const formData = new FormData(form);
+
+      for (const [key, value] of formData.entries()) {
+        const match = key.match(/^properties\[(.+)\]$/);
+        if (!match || value === "") continue;
+        properties[match[1]] = value;
+      }
+
+      return properties;
+    };
+
+    const getCartSectionIds = () =>
+      Array.from(document.querySelectorAll("cart-items-component[data-section-id]"))
+        .map((item) => item.dataset.sectionId)
+        .filter(Boolean);
+
+    const getCartAddUrl = () => {
+      if (window.Theme?.routes?.cart_add_url) return window.Theme.routes.cart_add_url;
+      return `${window.Shopify?.routes?.root || "/"}cart/add.js`;
+    };
+
+    const dispatchCartUpdate = (root, form, response, quantity) => {
+      const event = new Event("cart:update", { bubbles: true });
+      event.detail = {
+        resource: response,
+        sourceId: form.id || "apple-care-addon",
+        data: {
+          source: "product-form-component",
+          itemCount: quantity,
+          productId: root.dataset.productId,
+          sections: response.sections,
+        },
+      };
+
+      form.dispatchEvent(event);
+    };
+
+    const addBundleToCart = async (root, form, state) => {
+      const mainVariantId = normalizeVariantId(form.querySelector('input[name="id"]')?.value);
+      const appleCareVariantId = normalizeVariantId(state.appleCareVariantId);
+
+      if (!mainVariantId || !appleCareVariantId) return;
+
+      const quantity = getQuantity(form);
+      const cartSectionIds = getCartSectionIds();
+      const payload = {
+        items: [
+          {
+            id: Number(mainVariantId),
+            quantity,
+            properties: getProperties(form),
+          },
+          {
+            id: Number(appleCareVariantId),
+            quantity,
+            properties: {
+              _apple_care_addon: "true",
+              _apple_care_parent_variant_id: mainVariantId,
+              _apple_care_parent_product_id: root.dataset.productId || "",
+              _apple_care_parent_title: root.dataset.productTitle || "",
+            },
+          },
+        ],
+      };
+
+      const sellingPlan = form.querySelector('[name="selling_plan"]')?.value;
+      if (sellingPlan) payload.items[0].selling_plan = sellingPlan;
+
+      if (cartSectionIds.length) {
+        payload.sections = cartSectionIds.join(",");
+        payload.sections_url = window.location.pathname;
+      }
+
+      const response = await fetch(getCartAddUrl(), {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok || data.status) {
+        throw new Error(data.description || data.message || "Unable to add AppleCare to cart");
+      }
+
+      dispatchCartUpdate(root, form, data, quantity);
+    };
+
+    const enhanceProductForm = (root, form, state) => {
+      if (!form || form.dataset[FORM_INIT_FLAG] === "true") return;
+      form.dataset[FORM_INIT_FLAG] = "true";
+
+      form.addEventListener(
+        "submit",
+        async (event) => {
+          if (!state.toggleEl?.checked || !state.appleCareVariantId || root.hidden) return;
+
+          event.preventDefault();
+          event.stopImmediatePropagation();
+
+          const submitter = event.submitter;
+          const buttons = Array.from(
+            form.querySelectorAll('button[type="submit"], input[type="submit"]'),
+          );
+
+          buttons.forEach((button) => {
+            button.disabled = true;
+            button.setAttribute("aria-busy", "true");
+          });
+
+          try {
+            await addBundleToCart(root, form, state);
+          } catch (error) {
+            console.error(error);
+            window.alert(error.message || "Unable to add AppleCare to cart");
+          } finally {
+            buttons.forEach((button) => {
+              button.disabled = false;
+              button.removeAttribute("aria-busy");
+            });
+
+            if (submitter instanceof HTMLElement) {
+              submitter.focus();
+            }
+          }
+        },
+        true,
+      );
+    };
+
     const initRoot = (root) => {
       if (root.dataset[INIT_FLAG] === "true") return;
       root.dataset[INIT_FLAG] = "true";
@@ -148,6 +291,11 @@
       const priceEl = root.querySelector("[data-apple-care-price]");
       const toggleEl = root.querySelector("[data-apple-care-toggle]");
       const variantInput = findVariantInput(root);
+      const form = variantInput?.form;
+      const state = {
+        appleCareVariantId: "",
+        toggleEl,
+      };
 
       let timerId = null;
       let pollId = null;
@@ -159,11 +307,21 @@
 
       const render = (payload) => {
         if (!payload?.ok || !payload.hasAppleCare) {
+          state.appleCareVariantId = "";
+          if (toggleEl) toggleEl.checked = false;
           setVisible(false);
           return;
         }
 
         const appleCare = payload.appleCare || {};
+        state.appleCareVariantId = normalizeVariantId(appleCare.variantId);
+
+        if (!state.appleCareVariantId) {
+          if (toggleEl) toggleEl.checked = false;
+          setVisible(false);
+          return;
+        }
+
         if (titleEl) titleEl.textContent = appleCare.productTitle || "AppleCare+";
         if (priceEl) priceEl.textContent = appleCare.price || "";
         if (toggleEl) toggleEl.checked = false;
@@ -220,12 +378,7 @@
 
       document.addEventListener("variant:change", schedule);
       document.addEventListener("product:variant-change", schedule);
-
-      if (toggleEl) {
-        toggleEl.addEventListener("change", () => {
-          // Visual selection only for now. Cart integration is coming later.
-        });
-      }
+      enhanceProductForm(root, form, state);
 
       pollId = window.setInterval(() => {
         const currentVariantId = normalizeVariantId(
