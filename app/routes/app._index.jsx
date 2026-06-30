@@ -14,20 +14,18 @@ export default function AppHome() {
           <s-box>
             <s-heading>Available on the storefront</s-heading>
             <s-paragraph>
-              AppleCare+ is now available as an add-on option for approved products and approved bundle products on
-              the storefront. Customers can select AppleCare+ while adding eligible items to cart, and the AppleCare+
-              item is added as a real Shopify line item linked to the parent product or bundle.
+              AppleCare+ is now available for eligible products on the storefront. Customers can choose AppleCare+
+              before adding a product to cart.
             </s-paragraph>
           </s-box>
 
           <s-box>
-            <s-heading>Service coverage</s-heading>
+            <s-heading>Where it appears</s-heading>
             <s-unordered-list>
-              <s-list-item>Product page AppleCare+ offer card</s-list-item>
-              <s-list-item>Quick-view AppleCare+ option on collection product popups</s-list-item>
-              <s-list-item>Approved standalone product and bundle mappings</s-list-item>
-              <s-list-item>Cart quantity sync between parent item and AppleCare+</s-list-item>
-              <s-list-item>Hidden AppleCare+ backend products that remain cart-addable</s-list-item>
+              <s-list-item>Product pages</s-list-item>
+              <s-list-item>Quick-view product popups</s-list-item>
+              <s-list-item>Eligible bundle products</s-list-item>
+              <s-list-item>Cart and checkout after the customer selects AppleCare+</s-list-item>
             </s-unordered-list>
           </s-box>
         </s-stack>
