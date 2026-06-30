@@ -3,6 +3,13 @@
 <style>
   .apple-care-addon {
     margin-top: 1.5rem;
+    overflow: hidden;
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+      opacity 260ms ease,
+      transform 260ms ease,
+      max-height 320ms ease;
   }
 
   .apple-care-addon[hidden] {
@@ -10,68 +17,294 @@
   }
 
   .apple-care-addon__card {
-    border: 1px solid rgba(18, 18, 18, 0.12);
-    border-radius: 8px;
-    background: #fff;
-    padding: 1rem;
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1rem;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 18px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 250, 252, 0.98)),
+      #fff;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    padding: 1.15rem;
+    transition:
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms ease;
   }
 
-  .apple-care-addon__eyebrow {
-    font-size: 0.75rem;
-    line-height: 1rem;
-    letter-spacing: 0;
-    text-transform: uppercase;
-    color: rgba(18, 18, 18, 0.62);
-    margin-bottom: 0.25rem;
+  .apple-care-addon__card:hover {
+    border-color: rgba(0, 113, 227, 0.36);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.09);
+    transform: translateY(-1px);
+  }
+
+  .apple-care-addon__icon {
+    display: grid;
+    place-items: center;
+    width: 2.9rem;
+    height: 2.9rem;
+    border-radius: 14px;
+    color: #0071e3;
+    background: linear-gradient(180deg, #f5fbff, #eaf4ff);
+    box-shadow: inset 0 0 0 1px rgba(0, 113, 227, 0.12);
+  }
+
+  .apple-care-addon__icon svg {
+    width: 1.55rem;
+    height: 1.55rem;
   }
 
   .apple-care-addon__title {
     margin: 0;
-    font-size: 1rem;
-    line-height: 1.25rem;
+    font-size: 1.08rem;
+    line-height: 1.25;
     font-weight: 600;
-    color: rgb(18, 18, 18);
+    color: #1d1d1f;
   }
 
-  .apple-care-addon__product {
-    margin: 0.35rem 0 0;
-    font-size: 0.95rem;
-    line-height: 1.4;
-    color: rgba(18, 18, 18, 0.86);
+  .apple-care-addon__subtitle {
+    margin: 0.28rem 0 0;
+    color: #515154;
+    font-size: 0.94rem;
+    line-height: 1.45;
+  }
+
+  .apple-care-addon__benefits {
+    display: grid;
+    gap: 0.38rem;
+    margin: 0.85rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .apple-care-addon__benefits li {
+    display: flex;
+    align-items: center;
+    gap: 0.46rem;
+    color: #3a3a3c;
+    font-size: 0.9rem;
+    line-height: 1.35;
+  }
+
+  .apple-care-addon__benefits li::before {
+    content: "";
+    width: 0.38rem;
+    height: 0.38rem;
+    border-radius: 50%;
+    background: #0071e3;
+    flex: 0 0 auto;
+  }
+
+  .apple-care-addon__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.9rem;
+    margin-top: 1rem;
   }
 
   .apple-care-addon__price {
-    margin: 0.35rem 0 0;
-    font-size: 0.95rem;
-    line-height: 1.4;
-    font-weight: 600;
-    color: rgb(18, 18, 18);
-  }
-
-  .apple-care-addon__text {
-    margin: 0.6rem 0 0;
-    font-size: 0.92rem;
-    line-height: 1.45;
-    color: rgba(18, 18, 18, 0.76);
+    color: #1d1d1f;
+    font-size: 1.12rem;
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: 0;
   }
 
   .apple-care-addon__toggle {
-    display: inline-flex;
+    position: relative;
+    display: flex;
     align-items: center;
-    gap: 0.6rem;
-    margin-top: 0.8rem;
-    font-size: 0.95rem;
-    line-height: 1.35;
-    color: rgb(18, 18, 18);
+    gap: 0.55rem;
+    min-height: 2.3rem;
+    border: 1px solid rgba(0, 113, 227, 0.28);
+    border-radius: 999px;
+    background: #f5fbff;
+    padding: 0.52rem 0.82rem 0.52rem 0.58rem;
+    color: #0066cc;
+    font-size: 0.9rem;
+    line-height: 1.2;
+    font-weight: 600;
     cursor: pointer;
     user-select: none;
+    transition:
+      background 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease;
+    white-space: nowrap;
+  }
+
+  .apple-care-addon__toggle:hover {
+    border-color: rgba(0, 113, 227, 0.52);
+    background: #eef7ff;
   }
 
   .apple-care-addon__toggle input {
-    width: 1rem;
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .apple-care-addon__check {
+    display: grid;
+    place-items: center;
+    width: 1.12rem;
+    height: 1.12rem;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+
+  .apple-care-addon__check svg {
+    width: 0.7rem;
+    height: 0.7rem;
+    opacity: 0;
+    transform: scale(0.6);
+    transition:
+      opacity 160ms ease,
+      transform 160ms ease;
+  }
+
+  .apple-care-addon__toggle:has(input:checked) {
+    border-color: #0071e3;
+    background: #0071e3;
+    color: #fff;
+  }
+
+  .apple-care-addon__toggle:has(input:checked) .apple-care-addon__check svg {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .apple-care-addon__selected-text {
+    display: none;
+  }
+
+  .apple-care-addon__toggle:has(input:checked) .apple-care-addon__default-text {
+    display: none;
+  }
+
+  .apple-care-addon__toggle:has(input:checked) .apple-care-addon__selected-text {
+    display: inline;
+  }
+
+  .apple-care-addon__loading,
+  .apple-care-addon__error {
+    display: none;
+    grid-column: 1 / -1;
+  }
+
+  .apple-care-addon[data-state="loading"] .apple-care-addon__content,
+  .apple-care-addon[data-state="loading"] .apple-care-addon__icon,
+  .apple-care-addon[data-state="error"] .apple-care-addon__content {
+    display: none;
+  }
+
+  .apple-care-addon[data-state="loading"] .apple-care-addon__loading,
+  .apple-care-addon[data-state="error"] .apple-care-addon__error {
+    display: block;
+  }
+
+  .apple-care-addon__skeleton-line {
+    height: 0.82rem;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #f0f1f3 0%, #fafafa 48%, #f0f1f3 100%);
+    background-size: 220% 100%;
+    animation: apple-care-shimmer 1.1s linear infinite;
+  }
+
+  .apple-care-addon__skeleton-line + .apple-care-addon__skeleton-line {
+    margin-top: 0.65rem;
+  }
+
+  .apple-care-addon__skeleton-line:nth-child(1) {
+    width: 46%;
     height: 1rem;
+  }
+
+  .apple-care-addon__skeleton-line:nth-child(2) {
+    width: 78%;
+  }
+
+  .apple-care-addon__skeleton-line:nth-child(3) {
+    width: 58%;
+  }
+
+  .apple-care-addon__loading-text,
+  .apple-care-addon__error-title {
     margin: 0;
-    accent-color: rgb(18, 18, 18);
+    color: #1d1d1f;
+    font-size: 0.94rem;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .apple-care-addon__loading-text {
+    margin-top: 0.85rem;
+    color: #6e6e73;
+    font-weight: 500;
+  }
+
+  .apple-care-addon__error-text {
+    margin: 0.3rem 0 0;
+    color: #6e6e73;
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+
+  .apple-care-addon[data-state="ready"] {
+    animation: apple-care-reveal 300ms ease both;
+  }
+
+  @keyframes apple-care-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes apple-care-shimmer {
+    from {
+      background-position: 120% 0;
+    }
+
+    to {
+      background-position: -120% 0;
+    }
+  }
+
+  @media screen and (max-width: 749px) {
+    .apple-care-addon__card {
+      grid-template-columns: 1fr;
+      gap: 0.85rem;
+      border-radius: 16px;
+      padding: 1rem;
+    }
+
+    .apple-care-addon__icon {
+      width: 2.55rem;
+      height: 2.55rem;
+    }
+
+    .apple-care-addon__footer {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .apple-care-addon__toggle {
+      justify-content: center;
+      width: 100%;
+      white-space: normal;
+      text-align: center;
+    }
   }
 </style>
 
@@ -85,15 +318,50 @@
   hidden
 >
   <div class="apple-care-addon__card">
-    <div class="apple-care-addon__eyebrow">Add-on</div>
-    <h3 class="apple-care-addon__title">AppleCare+</h3>
-    <p class="apple-care-addon__product" data-apple-care-product-title></p>
-    <p class="apple-care-addon__price" data-apple-care-price></p>
-    <p class="apple-care-addon__text">Get additional coverage and support for your device.</p>
-    <label class="apple-care-addon__toggle">
-      <input type="checkbox" data-apple-care-toggle />
-      <span>Add AppleCare+</span>
-    </label>
+    <div class="apple-care-addon__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M12 3.25 5.75 5.6v5.15c0 4.05 2.48 7.7 6.25 9.15 3.77-1.45 6.25-5.1 6.25-9.15V5.6L12 3.25Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="m8.9 12 2.1 2.1 4.25-4.55" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+
+    <div class="apple-care-addon__content">
+      <h3 class="apple-care-addon__title">AppleCare+</h3>
+      <p class="apple-care-addon__subtitle">Protect your device with AppleCare+.</p>
+      <p class="apple-care-addon__subtitle" data-apple-care-product-title hidden></p>
+
+      <ul class="apple-care-addon__benefits" aria-label="AppleCare benefits">
+        <li>Priority support</li>
+        <li>Accidental damage coverage</li>
+        <li>Hardware coverage</li>
+      </ul>
+
+      <div class="apple-care-addon__footer">
+        <div class="apple-care-addon__price" data-apple-care-price></div>
+        <label class="apple-care-addon__toggle">
+          <input type="checkbox" data-apple-care-toggle />
+          <span class="apple-care-addon__check" aria-hidden="true">
+            <svg viewBox="0 0 12 12" fill="none">
+              <path d="m2.4 6.2 2.1 2.1 5.1-5.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span class="apple-care-addon__default-text">Protect this device with AppleCare+</span>
+          <span class="apple-care-addon__selected-text">AppleCare will be added</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="apple-care-addon__loading" aria-live="polite">
+      <div class="apple-care-addon__skeleton-line"></div>
+      <div class="apple-care-addon__skeleton-line"></div>
+      <div class="apple-care-addon__skeleton-line"></div>
+      <p class="apple-care-addon__loading-text">Loading AppleCare...</p>
+    </div>
+
+    <div class="apple-care-addon__error" role="status">
+      <p class="apple-care-addon__error-title">AppleCare is temporarily unavailable.</p>
+      <p class="apple-care-addon__error-text">Please try changing the variant or refreshing the page.</p>
+    </div>
   </div>
 </div>
 
@@ -407,8 +675,19 @@
       let pollId = null;
       let lastRequestedVariantId = "";
 
+      const setState = (stateName) => {
+        root.dataset.state = stateName;
+      };
+
       const setVisible = (visible) => {
         root.hidden = !visible;
+      };
+
+      const formatPrice = (price) => {
+        const raw = String(price || "").trim();
+        if (!raw) return "";
+        if (/^(SAR|ر\.س)/i.test(raw)) return raw;
+        return `SAR ${raw}`;
       };
 
       const render = (payload) => {
@@ -429,10 +708,11 @@
         }
 
         if (titleEl) titleEl.textContent = appleCare.productTitle || "AppleCare+";
-        if (priceEl) priceEl.textContent = appleCare.price || "";
+        if (priceEl) priceEl.textContent = formatPrice(appleCare.price);
         if (toggleEl) toggleEl.checked = false;
 
         setVisible(true);
+        setState("ready");
       };
 
       const load = async () => {
@@ -447,10 +727,15 @@
         lastRequestedVariantId = currentVariantId;
 
         try {
+          setState("loading");
+          setVisible(true);
           const payload = await fetchAppleCare(lookupUrl, currentVariantId);
           render(payload);
         } catch (error) {
-          setVisible(false);
+          state.appleCareVariantId = "";
+          if (toggleEl) toggleEl.checked = false;
+          setVisible(true);
+          setState("error");
         }
       };
 
