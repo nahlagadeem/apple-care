@@ -205,25 +205,7 @@
 
       const quantity = getQuantity(form);
       const cartSectionIds = getCartSectionIds();
-      const payload = {
-        items: [
-          {
-            id: Number(mainVariantId),
-            quantity,
-            properties: getProperties(form),
-          },
-          {
-            id: Number(appleCareVariantId),
-            quantity,
-            properties: {
-              _apple_care_addon: "true",
-              _apple_care_parent_variant_id: mainVariantId,
-              _apple_care_parent_product_id: root.dataset.productId || "",
-              _apple_care_parent_title: root.dataset.productTitle || "",
-            },
-          },
-        ],
-      };
+      const payload = buildCartPayload(root, form, state, mainVariantId, appleCareVariantId, quantity);
 
       const sellingPlan = form.querySelector('[name="selling_plan"]')?.value;
       if (sellingPlan) payload.items[0].selling_plan = sellingPlan;
@@ -258,9 +240,94 @@
       dispatchCartUpdate(root, form, data, quantity);
     };
 
+    const buildCartPayload = (root, form, state, mainVariantId, appleCareVariantId, quantity) => ({
+      items: [
+        {
+          id: Number(mainVariantId),
+          quantity,
+          properties: getProperties(form),
+        },
+        {
+          id: Number(appleCareVariantId),
+          quantity,
+          properties: {
+            _apple_care_addon: "true",
+            _apple_care_parent_variant_id: mainVariantId,
+            _apple_care_parent_product_id: root.dataset.productId || "",
+            _apple_care_parent_title: root.dataset.productTitle || "",
+          },
+        },
+      ],
+    });
+
+    const installFetchInterceptor = () => {
+      if (window.__appleCareFetchInterceptor?.installed) return window.__appleCareFetchInterceptor;
+
+      const interceptor = {
+        installed: true,
+        nativeFetch: window.fetch.bind(window),
+        entries: [],
+      };
+
+      window.__appleCareFetchInterceptor = interceptor;
+
+      window.fetch = (input, init = {}) => {
+        const url = input instanceof Request ? input.url : String(input || "");
+        const method = String(init.method || (input instanceof Request ? input.method : "GET") || "GET").toUpperCase();
+        const body = init.body || null;
+        const isCartAdd = /\/cart\/add(\.js)?(?:\?|$)/.test(url);
+
+        if (!isCartAdd || method !== "POST" || !(body instanceof FormData)) {
+          return interceptor.nativeFetch(input, init);
+        }
+
+        const submittedVariantId = normalizeVariantId(body.get("id"));
+        const entry = interceptor.entries.find((candidate) => {
+          const formVariantId = normalizeVariantId(candidate.form.querySelector('input[name="id"]')?.value);
+          return formVariantId && formVariantId === submittedVariantId && shouldAddAppleCare(candidate.root, candidate.state);
+        });
+
+        if (!entry) return interceptor.nativeFetch(input, init);
+
+        const mainVariantId = normalizeVariantId(entry.form.querySelector('input[name="id"]')?.value);
+        const appleCareVariantId = normalizeVariantId(entry.state.appleCareVariantId);
+        const quantity = getQuantity(entry.form);
+
+        if (!mainVariantId || !appleCareVariantId) return interceptor.nativeFetch(input, init);
+
+        const payload = buildCartPayload(entry.root, entry.form, entry.state, mainVariantId, appleCareVariantId, quantity);
+        const sellingPlan = entry.form.querySelector('[name="selling_plan"]')?.value;
+        const cartSectionIds = getCartSectionIds();
+
+        if (sellingPlan) payload.items[0].selling_plan = sellingPlan;
+        if (cartSectionIds.length) {
+          payload.sections = cartSectionIds.join(",");
+          payload.sections_url = window.location.pathname;
+        }
+
+        console.debug(DEBUG_PREFIX, "rewriting cart add fetch payload", payload);
+
+        return interceptor.nativeFetch(getCartAddUrl(), {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          credentials: init.credentials || "same-origin",
+          body: JSON.stringify(payload),
+        });
+      };
+
+      return interceptor;
+    };
+
     const enhanceProductForm = (root, form, state) => {
       if (!form || form.dataset[FORM_INIT_FLAG] === "true") return;
       form.dataset[FORM_INIT_FLAG] = "true";
+
+      const fetchInterceptor = installFetchInterceptor();
+      fetchInterceptor.entries = fetchInterceptor.entries.filter((entry) => entry.form !== form);
+      fetchInterceptor.entries.push({ root, form, state });
 
       let isAddingBundle = false;
 
@@ -337,6 +404,7 @@
       root.addEventListener("shopify:section:unload", () => {
         window.removeEventListener("submit", handleSubmit, true);
         window.removeEventListener("click", handleClick, true);
+        fetchInterceptor.entries = fetchInterceptor.entries.filter((entry) => entry.form !== form);
         delete form.dataset[FORM_INIT_FLAG];
       });
     };
