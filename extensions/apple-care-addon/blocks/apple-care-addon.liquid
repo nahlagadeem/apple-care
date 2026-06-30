@@ -564,6 +564,7 @@
             _apple_care_parent_variant_id: mainVariantId,
             _apple_care_parent_product_id: root.dataset.productId || "",
             _apple_care_parent_title: root.dataset.productTitle || "",
+            ...(state.forDevice ? { _apple_care_for_device: state.forDevice } : {}),
           },
         },
       ],
@@ -721,6 +722,7 @@
       const form = variantInput?.form;
       const state = {
         appleCareVariantId: "",
+        forDevice: "",
         toggleEl,
       };
 
@@ -746,6 +748,7 @@
       const render = (payload) => {
         if (!payload?.ok || !payload.hasAppleCare) {
           state.appleCareVariantId = "";
+          state.forDevice = "";
           if (toggleEl) toggleEl.checked = false;
           setVisible(false);
           return;
@@ -753,8 +756,10 @@
 
         const appleCare = payload.appleCare || {};
         state.appleCareVariantId = normalizeVariantId(appleCare.variantId);
+        state.forDevice = String(appleCare.forDevice || "").trim();
 
         if (!state.appleCareVariantId) {
+          state.forDevice = "";
           if (toggleEl) toggleEl.checked = false;
           setVisible(false);
           return;
@@ -786,6 +791,7 @@
           render(payload);
         } catch (error) {
           state.appleCareVariantId = "";
+          state.forDevice = "";
           if (toggleEl) toggleEl.checked = false;
           setVisible(true);
           setState("error");

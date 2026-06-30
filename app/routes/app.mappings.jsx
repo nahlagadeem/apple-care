@@ -121,6 +121,9 @@ export default function MappingsPage() {
             <s-paragraph>
               Variant mappings created: {actionData.summary.variantMappingsCreated ?? actionData.summary.mappingsCreated}
             </s-paragraph>
+            <s-paragraph>
+              Approved bundle mappings processed: {actionData.summary.approvedBundleMappingsProcessed ?? 0}
+            </s-paragraph>
           </s-stack>
 
           {actionData.summary.seededPairs?.length > 0 ? (
@@ -130,6 +133,20 @@ export default function MappingsPage() {
                 {actionData.summary.seededPairs.map((item) => (
                   <s-list-item key={`${item.mainProductTitle}-${item.appleCareProductTitle}`}>
                     {item.mainProductTitle} to {item.appleCareProductTitle} ({item.mappingCount} variants)
+                  </s-list-item>
+                ))}
+              </s-unordered-list>
+            </s-box>
+          ) : null}
+
+          {actionData.summary.seededBundleMappings?.length > 0 ? (
+            <s-box>
+              <s-heading>Seeded bundle mappings</s-heading>
+              <s-unordered-list>
+                {actionData.summary.seededBundleMappings.map((item) => (
+                  <s-list-item key={`${item.bundleProductTitle}-${item.appleCareProductTitle}`}>
+                    {item.bundleProductTitle} - {item.bundleVariantTitle} to {item.appleCareProductTitle} ({item.mappingCount} mapping)
+                    {item.note ? ` - ${item.note}` : ""}
                   </s-list-item>
                 ))}
               </s-unordered-list>
@@ -169,6 +186,7 @@ export default function MappingsPage() {
                   <s-stack gap="small">
                     <s-heading>
                       {mapping.shopifyProductTitle} - {mapping.shopifyVariantTitle || mapping.shopifyVariantId}
+                      {mapping.isBundle ? " [Bundle]" : ""}
                     </s-heading>
                     <s-paragraph>
                       {mapping.isActive ? "Active" : "Inactive"} mapping to {mapping.appleCareProductTitle || mapping.appleCareVariantId}

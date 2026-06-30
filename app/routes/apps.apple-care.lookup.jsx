@@ -1,5 +1,10 @@
 import prisma from "../db.server";
 import { authenticate } from "../shopify.server";
+import {
+  APPROVED_BUNDLE_VARIANT_MAPPINGS,
+  toProductGid,
+  toVariantGid,
+} from "../approved-apple-care-mappings.server";
 
 const APPLE_CARE_VARIANT_QUERY = `#graphql
   query AppleCareLookupVariant($id: ID!) {
@@ -38,6 +43,28 @@ function errorResponse(message, status) {
   return Response.json({ ok: false, error: message }, { status });
 }
 
+function getApprovedBundleMapping(variantId) {
+  const mapping = APPROVED_BUNDLE_VARIANT_MAPPINGS.find(
+    (item) => toVariantGid(item.bundleVariantId) === variantId,
+  );
+
+  if (!mapping) return null;
+
+  return {
+    shopifyProductId: toProductGid(mapping.bundleProductId),
+    shopifyProductTitle: mapping.bundleProductTitle,
+    shopifyVariantId: toVariantGid(mapping.bundleVariantId),
+    shopifyVariantTitle: mapping.bundleVariantTitle,
+    appleCareProductId: toProductGid(mapping.appleCareProductId),
+    appleCareProductTitle: mapping.appleCareProductTitle,
+    appleCareVariantId: toVariantGid(mapping.appleCareVariantId),
+    appleCareVariantTitle: mapping.appleCareVariantTitle,
+    appleCareSku: "",
+    appleCarePriceSnapshot: mapping.appleCarePriceSnapshot,
+    forDevice: mapping.forDevice,
+  };
+}
+
 export const loader = async ({ request }) => {
   try {
     const { admin, session } = await authenticate.public.appProxy(request);
@@ -62,7 +89,7 @@ export const loader = async ({ request }) => {
       return errorResponse("Shop context is missing from the app proxy request.", 400);
     }
 
-    const mapping = await prisma.appleCareProductMapping.findFirst({
+    const dbMapping = await prisma.appleCareProductMapping.findFirst({
       where: {
         shop,
         shopifyVariantId: variantId,
@@ -70,6 +97,7 @@ export const loader = async ({ request }) => {
       },
       orderBy: { updatedAt: "desc" },
     });
+    const mapping = dbMapping || getApprovedBundleMapping(variantId);
 
     if (!mapping) {
       return Response.json({ ok: true, hasAppleCare: false });
@@ -99,6 +127,7 @@ export const loader = async ({ request }) => {
           variantTitle: node.title || appleCare.variantTitle,
           sku: node.sku || appleCare.sku,
           price: node.price || appleCare.price,
+          forDevice: mapping.forDevice || appleCare.forDevice,
         };
       }
     }
@@ -106,7 +135,10 @@ export const loader = async ({ request }) => {
     return Response.json({
       ok: true,
       hasAppleCare: true,
-      appleCare,
+      appleCare: {
+        ...appleCare,
+        forDevice: mapping.forDevice || appleCare.forDevice,
+      },
     });
   } catch (error) {
     if (error instanceof Response) {

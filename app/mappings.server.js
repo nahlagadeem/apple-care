@@ -1,6 +1,12 @@
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "./db.server";
 import { authenticate } from "./shopify.server";
+import {
+  APPROVED_BUNDLE_VARIANT_MAPPINGS,
+  APPROVED_PRODUCT_PAIRS,
+  toProductGid,
+  toVariantGid,
+} from "./approved-apple-care-mappings.server";
 
 function clean(value) {
   return String(value || "").trim();
@@ -28,18 +34,6 @@ const PRODUCT_QUERY = `#graphql
     }
   }
 `;
-
-const APPROVED_PRODUCT_PAIRS = [
-  { mainProductId: "9213557440730", appleCareProductId: "9354604773594" },
-  { mainProductId: "9142178611418", appleCareProductId: "9354605265114" },
-  { mainProductId: "9146880032986", appleCareProductId: "9354606280922" },
-  { mainProductId: "9151272091866", appleCareProductId: "9354607231194" },
-  { mainProductId: "9153037107418", appleCareProductId: "9354607919322" },
-  { mainProductId: "9153042284762", appleCareProductId: "9345007780058" },
-  { mainProductId: "9153046905050", appleCareProductId: "9354609262810" },
-  { mainProductId: "9153047068890", appleCareProductId: "9354610344154" },
-  { mainProductId: "9153244561626", appleCareProductId: "9354617225434" },
-];
 
 function getBoolean(formData, name) {
   return formData.get(name) === "on";
@@ -72,10 +66,6 @@ async function assertNoActiveDuplicate({ shop, shopifyVariantId, excludeId }) {
   }
 }
 
-function toProductGid(productId) {
-  return `gid://shopify/Product/${productId}`;
-}
-
 async function fetchProductById(admin, productId) {
   const response = await admin.graphql(PRODUCT_QUERY, {
     variables: { id: toProductGid(productId) },
@@ -94,6 +84,17 @@ async function fetchProductById(admin, productId) {
   return product;
 }
 
+function findProductVariant(product, variantId) {
+  const gid = toVariantGid(variantId);
+  const variant = product.variants.nodes.find((item) => item.id === gid);
+
+  if (!variant) {
+    throw new Error(`Shopify variant ${variantId} was not found on ${product.title}.`);
+  }
+
+  return variant;
+}
+
 function buildSeedMappings(shop, mainProduct, appleCareProduct, appleCareVariant) {
   return mainProduct.variants.nodes.map((mainVariant) => ({
     shop,
@@ -110,6 +111,24 @@ function buildSeedMappings(shop, mainProduct, appleCareProduct, appleCareVariant
     appleCarePriceSnapshot: appleCareVariant.price,
     isActive: true,
   }));
+}
+
+function buildBundleSeedMapping(shop, bundleProduct, bundleVariant, appleCareProduct, appleCareVariant) {
+  return {
+    shop,
+    shopifyProductId: bundleProduct.id,
+    shopifyProductTitle: bundleProduct.title,
+    shopifyVariantId: bundleVariant.id,
+    shopifyVariantTitle: bundleVariant.title || null,
+    shopifySku: bundleVariant.sku || null,
+    appleCareProductId: appleCareProduct.id,
+    appleCareProductTitle: appleCareProduct.title,
+    appleCareVariantId: appleCareVariant.id,
+    appleCareVariantTitle: appleCareVariant.title || null,
+    appleCareSku: appleCareVariant.sku || null,
+    appleCarePriceSnapshot: appleCareVariant.price,
+    isActive: true,
+  };
 }
 
 async function seedApprovedMappings({ admin, shop }) {
@@ -136,7 +155,32 @@ async function seedApprovedMappings({ admin, shop }) {
     }),
   );
 
-  const mappingRows = pairResults.flatMap((result) => result.mappings);
+  const bundleResults = await Promise.all(
+    APPROVED_BUNDLE_VARIANT_MAPPINGS.map(async (mapping) => {
+      const [bundleProduct, appleCareProduct] = await Promise.all([
+        fetchProductById(admin, mapping.bundleProductId),
+        fetchProductById(admin, mapping.appleCareProductId),
+      ]);
+
+      const bundleVariant = findProductVariant(bundleProduct, mapping.bundleVariantId);
+      const appleCareVariant = findProductVariant(appleCareProduct, mapping.appleCareVariantId);
+
+      return {
+        bundleProduct,
+        appleCareProduct,
+        bundleVariant,
+        note: mapping.note,
+        mappings: [
+          buildBundleSeedMapping(shop, bundleProduct, bundleVariant, appleCareProduct, appleCareVariant),
+        ],
+      };
+    }),
+  );
+
+  const mappingRows = [
+    ...pairResults.flatMap((result) => result.mappings),
+    ...bundleResults.flatMap((result) => result.mappings),
+  ];
   const removedMappings = await prisma.$transaction(async (tx) => {
     const deleted = await tx.appleCareProductMapping.deleteMany({
       where: { shop },
@@ -154,6 +198,7 @@ async function seedApprovedMappings({ admin, shop }) {
   return {
     approvedPairs: pairResults.length,
     approvedProductPairsProcessed: pairResults.length,
+    approvedBundleMappingsProcessed: bundleResults.length,
     mappingsRemoved: removedMappings,
     oldMappingsRemoved: removedMappings,
     mappingsCreated: mappingRows.length,
@@ -163,6 +208,13 @@ async function seedApprovedMappings({ admin, shop }) {
       appleCareProductTitle: result.appleCareProduct.title,
       mainVariantCount: result.mainProduct.variants.nodes.length,
       mappingCount: result.mappings.length,
+    })),
+    seededBundleMappings: bundleResults.map((result) => ({
+      bundleProductTitle: result.bundleProduct.title,
+      bundleVariantTitle: result.bundleVariant.title || result.bundleVariant.id,
+      appleCareProductTitle: result.appleCareProduct.title,
+      mappingCount: result.mappings.length,
+      note: result.note,
     })),
   };
 }
@@ -214,6 +266,7 @@ function serializeMapping(mapping) {
     appleCareSku: mapping.appleCareSku || "",
     appleCarePriceSnapshot: mapping.appleCarePriceSnapshot?.toString() || "",
     isActive: mapping.isActive,
+    isBundle: /bundle/i.test(mapping.shopifyProductTitle),
     updatedAt: mapping.updatedAt.toISOString(),
   };
 }
