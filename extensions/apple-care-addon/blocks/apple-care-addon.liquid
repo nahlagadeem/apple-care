@@ -43,17 +43,17 @@
     place-items: center;
     width: 44px;
     height: 44px;
-    border-radius: 14px;
-    color: #fff;
-    background: linear-gradient(145deg, #fb9ca8, #d7192d);
-    box-shadow:
-      inset 0 0 0 1px rgba(255, 255, 255, 0.34),
-      0 8px 16px rgba(215, 25, 45, 0.2);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #f7f7f8;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
   }
 
-  .apple-care-addon__icon svg {
-    width: 22px;
-    height: 22px;
+  .apple-care-addon__icon img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
   }
 
   .apple-care-addon__title {
@@ -106,8 +106,9 @@
     grid-template-columns: minmax(7.5rem, 1fr) minmax(0, auto);
     align-items: flex-start;
     justify-content: space-between;
+    grid-column: 1 / -1;
     gap: 0.85rem;
-    margin-top: 0.85rem;
+    margin-top: 0;
     border-top: 1px solid rgba(0, 0, 0, 0.08);
     padding-top: 0.75rem;
   }
@@ -133,10 +134,11 @@
 
   .apple-care-addon__toggle-wrap {
     display: grid;
-    justify-items: start;
+    justify-items: end;
     gap: 0.2rem;
     min-width: 0;
     max-width: 13.5rem;
+    text-align: right;
   }
 
   .apple-care-addon__toggle {
@@ -157,6 +159,7 @@
     user-select: none;
     white-space: normal;
     min-width: 0;
+    justify-content: flex-end;
   }
 
   .apple-care-addon__toggle:hover {
@@ -197,6 +200,7 @@
     font-size: 0.78rem;
     line-height: 1.25;
     max-width: 12rem;
+    text-align: right;
   }
 
   .apple-care-addon__selected-helper {
@@ -220,6 +224,7 @@
 
   .apple-care-addon[data-state="loading"] .apple-care-addon__content,
   .apple-care-addon[data-state="loading"] .apple-care-addon__icon,
+  .apple-care-addon[data-state="loading"] .apple-care-addon__footer,
   .apple-care-addon[data-state="error"] .apple-care-addon__content {
     display: none;
   }
@@ -337,6 +342,11 @@
     .apple-care-addon__helper,
     .apple-care-addon__selected-helper {
       max-width: none;
+      text-align: left;
+    }
+
+    .apple-care-addon__toggle-wrap {
+      justify-items: start;
     }
   }
 </style>
@@ -352,10 +362,13 @@
 >
   <div class="apple-care-addon__card">
     <div class="apple-care-addon__icon" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none">
-        <path d="M12 3.25 5.75 5.6v5.15c0 4.05 2.48 7.7 6.25 9.15 3.77-1.45 6.25-5.1 6.25-9.15V5.6L12 3.25Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-        <path d="m8.9 12 2.1 2.1 4.25-4.55" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
+      <img
+        src="{{ 'apple-care.svg' | asset_url }}"
+        alt=""
+        width="44"
+        height="44"
+        loading="lazy"
+      >
     </div>
 
     <div class="apple-care-addon__content">
@@ -368,26 +381,26 @@
         <li>Accidental damage coverage</li>
         <li>Hardware coverage and service</li>
       </ul>
+    </div>
 
-      <div class="apple-care-addon__footer">
-        <div class="apple-care-addon__price-wrap">
-          <div class="apple-care-addon__price" data-apple-care-price></div>
-          <p class="apple-care-addon__vat">Price includes VAT</p>
-        </div>
-        <div class="apple-care-addon__toggle-wrap">
-          <label class="apple-care-addon__toggle">
-            <input type="checkbox" data-apple-care-toggle />
-            <span class="apple-care-addon__check" aria-hidden="true">
-              <svg viewBox="0 0 12 12" fill="none">
-                <path d="m2.4 6.2 2.1 2.1 5.1-5.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </span>
-            <span class="apple-care-addon__default-text">Add AppleCare+</span>
-            <span class="apple-care-addon__selected-text">AppleCare will be added</span>
-          </label>
-          <p class="apple-care-addon__helper">Will be added to your cart</p>
-          <p class="apple-care-addon__selected-helper">AppleCare will be added</p>
-        </div>
+    <div class="apple-care-addon__footer">
+      <div class="apple-care-addon__price-wrap">
+        <div class="apple-care-addon__price" data-apple-care-price></div>
+        <p class="apple-care-addon__vat">Price includes VAT</p>
+      </div>
+      <div class="apple-care-addon__toggle-wrap">
+        <label class="apple-care-addon__toggle">
+          <input type="checkbox" data-apple-care-toggle />
+          <span class="apple-care-addon__check" aria-hidden="true">
+            <svg viewBox="0 0 12 12" fill="none">
+              <path d="m2.4 6.2 2.1 2.1 5.1-5.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span class="apple-care-addon__default-text">Add AppleCare+</span>
+          <span class="apple-care-addon__selected-text">AppleCare will be added</span>
+        </label>
+        <p class="apple-care-addon__helper">Will be added to your cart</p>
+        <p class="apple-care-addon__selected-helper">AppleCare will be added</p>
       </div>
     </div>
 
