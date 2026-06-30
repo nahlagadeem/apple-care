@@ -103,7 +103,7 @@
     const FORM_INIT_FLAG = "appleCareFormInitialized";
     const LOOKUP_DELAY_MS = 100;
     const POLL_INTERVAL_MS = 250;
-    const DEBUG_PREFIX = "[AppleCare Add-on]";
+    const ERROR_PREFIX = "[AppleCare Add-on]";
 
     const normalizeVariantId = (value) => {
       const raw = String(value || "").trim();
@@ -141,11 +141,6 @@
       }
 
       const payload = await response.json();
-      console.debug(DEBUG_PREFIX, "lookup response", {
-        variantId,
-        hasAppleCare: payload?.hasAppleCare,
-        appleCareVariantId: payload?.appleCare?.variantId,
-      });
       return payload;
     };
 
@@ -215,8 +210,6 @@
         payload.sections_url = window.location.pathname;
       }
 
-      console.debug(DEBUG_PREFIX, "cart add payload", payload);
-
       const response = await fetch(getCartAddUrl(), {
         method: "POST",
         headers: {
@@ -227,11 +220,6 @@
       });
 
       const data = await response.json();
-      console.debug(DEBUG_PREFIX, "cart add response", {
-        ok: response.ok,
-        status: response.status,
-        response: data,
-      });
 
       if (!response.ok || data.status) {
         throw new Error(data.description || data.message || "Unable to add AppleCare to cart");
@@ -305,8 +293,6 @@
           payload.sections_url = window.location.pathname;
         }
 
-        console.debug(DEBUG_PREFIX, "rewriting cart add fetch payload", payload);
-
         return interceptor.nativeFetch(getCartAddUrl(), {
           method: "POST",
           headers: {
@@ -332,13 +318,6 @@
       let isAddingBundle = false;
 
       const runAppleCareAdd = async (event) => {
-        console.debug(DEBUG_PREFIX, "add observed", {
-          eventType: event.type,
-          checked: Boolean(state.toggleEl?.checked),
-          appleCareVariantId: state.appleCareVariantId,
-          hidden: root.hidden,
-        });
-
         if (!shouldAddAppleCare(root, state)) return false;
 
         event.preventDefault();
@@ -360,7 +339,7 @@
         try {
           await addBundleToCart(root, form, state);
         } catch (error) {
-          console.error(DEBUG_PREFIX, error);
+          console.error(ERROR_PREFIX, error);
           window.alert(error.message || "Unable to add AppleCare to cart");
         } finally {
           buttons.forEach((button) => {
@@ -442,10 +421,6 @@
 
         const appleCare = payload.appleCare || {};
         state.appleCareVariantId = normalizeVariantId(appleCare.variantId);
-        console.debug(DEBUG_PREFIX, "mapped AppleCare variant", {
-          rawVariantId: appleCare.variantId,
-          numericVariantId: state.appleCareVariantId,
-        });
 
         if (!state.appleCareVariantId) {
           if (toggleEl) toggleEl.checked = false;
