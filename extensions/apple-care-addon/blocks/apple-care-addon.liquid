@@ -178,6 +178,9 @@
       return `${window.Shopify?.routes?.root || "/"}cart/add.js`;
     };
 
+    const shouldAddAppleCare = (root, state) =>
+      Boolean(state.toggleEl?.checked && state.appleCareVariantId && !root.hidden);
+
     const dispatchCartUpdate = (root, form, response, quantity) => {
       const event = new Event("cart:update", { bubbles: true });
       event.detail = {
@@ -259,23 +262,27 @@
       if (!form || form.dataset[FORM_INIT_FLAG] === "true") return;
       form.dataset[FORM_INIT_FLAG] = "true";
 
-      const handleSubmit = async (event) => {
-        if (event.target !== form) return;
+      let isAddingBundle = false;
 
-        console.debug(DEBUG_PREFIX, "submit observed", {
+      const runAppleCareAdd = async (event) => {
+        console.debug(DEBUG_PREFIX, "add observed", {
+          eventType: event.type,
           checked: Boolean(state.toggleEl?.checked),
           appleCareVariantId: state.appleCareVariantId,
           hidden: root.hidden,
         });
 
-        if (!state.toggleEl?.checked || !state.appleCareVariantId || root.hidden) return;
+        if (!shouldAddAppleCare(root, state)) return false;
 
         event.preventDefault();
         event.stopImmediatePropagation();
 
+        if (isAddingBundle) return true;
+        isAddingBundle = true;
+
         const submitter = event.submitter;
         const buttons = Array.from(
-          form.querySelectorAll('button[type="submit"], input[type="submit"]'),
+          form.querySelectorAll('button[type="submit"], button[name="add"], input[type="submit"]'),
         );
 
         buttons.forEach((button) => {
@@ -297,7 +304,27 @@
           if (submitter instanceof HTMLElement) {
             submitter.focus();
           }
+
+          isAddingBundle = false;
         }
+
+        return true;
+      };
+
+      const handleSubmit = async (event) => {
+        if (event.target !== form) return;
+
+        await runAppleCareAdd(event);
+      };
+
+      const handleClick = async (event) => {
+        const button = event.target?.closest?.(
+          'button[name="add"], add-to-cart-component button, [ref="addToCartButton"]',
+        );
+
+        if (!button || !form.contains(button)) return;
+
+        await runAppleCareAdd(event);
       };
 
       window.addEventListener(
@@ -305,9 +332,11 @@
         handleSubmit,
         true,
       );
+      window.addEventListener("click", handleClick, true);
 
       root.addEventListener("shopify:section:unload", () => {
         window.removeEventListener("submit", handleSubmit, true);
+        window.removeEventListener("click", handleClick, true);
         delete form.dataset[FORM_INIT_FLAG];
       });
     };
