@@ -132,6 +132,20 @@
     line-height: 1.25;
   }
 
+  .apple-care-addon__login-price {
+    margin: 0;
+    color: #6e6e73;
+    font-size: 0.92rem;
+    line-height: 1.3;
+    font-weight: 600;
+  }
+
+  .apple-care-addon__price[hidden],
+  .apple-care-addon__vat[hidden],
+  .apple-care-addon__login-price[hidden] {
+    display: none !important;
+  }
+
   .apple-care-addon__toggle-wrap {
     display: grid;
     justify-items: end;
@@ -358,6 +372,7 @@
   data-initial-variant-id="{{ apple_care_variant.id }}"
   data-product-id="{{ product.id }}"
   data-product-title="{{ product.title | escape }}"
+  data-customer-logged-in="{% if customer %}true{% else %}false{% endif %}"
   hidden
 >
   <div class="apple-care-addon__card">
@@ -386,7 +401,8 @@
     <div class="apple-care-addon__footer">
       <div class="apple-care-addon__price-wrap">
         <div class="apple-care-addon__price" data-apple-care-price></div>
-        <p class="apple-care-addon__vat">Price includes VAT</p>
+        <p class="apple-care-addon__vat" data-apple-care-vat>Price includes VAT</p>
+        <p class="apple-care-addon__login-price" data-apple-care-login-price hidden>Log in to view discounted price</p>
       </div>
       <div class="apple-care-addon__toggle-wrap">
         <label class="apple-care-addon__toggle">
@@ -717,9 +733,12 @@
       const lookupUrl = root.dataset.lookupUrl;
       const titleEl = root.querySelector("[data-apple-care-product-title]");
       const priceEl = root.querySelector("[data-apple-care-price]");
+      const vatEl = root.querySelector("[data-apple-care-vat]");
+      const loginPriceEl = root.querySelector("[data-apple-care-login-price]");
       const toggleEl = root.querySelector("[data-apple-care-toggle]");
       const variantInput = findVariantInput(root);
       const form = variantInput?.form;
+      const isCustomerLoggedIn = root.dataset.customerLoggedIn === "true";
       const state = {
         appleCareVariantId: "",
         forDevice: "",
@@ -745,6 +764,16 @@
         return `SAR ${raw}`;
       };
 
+      const renderPrice = (price) => {
+        if (priceEl) priceEl.hidden = !isCustomerLoggedIn;
+        if (vatEl) vatEl.hidden = !isCustomerLoggedIn;
+        if (loginPriceEl) loginPriceEl.hidden = isCustomerLoggedIn;
+
+        if (priceEl) {
+          priceEl.textContent = isCustomerLoggedIn ? formatPrice(price) : "";
+        }
+      };
+
       const render = (payload) => {
         if (!payload?.ok || !payload.hasAppleCare) {
           state.appleCareVariantId = "";
@@ -766,7 +795,7 @@
         }
 
         if (titleEl) titleEl.textContent = appleCare.productTitle || "AppleCare+";
-        if (priceEl) priceEl.textContent = formatPrice(appleCare.price);
+        renderPrice(appleCare.price);
         if (toggleEl) toggleEl.checked = false;
 
         setVisible(true);
