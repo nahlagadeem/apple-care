@@ -2,6 +2,7 @@ import prisma from "../db.server";
 import { authenticate } from "../shopify.server";
 import {
   APPROVED_BUNDLE_VARIANT_MAPPINGS,
+  APPROVED_PRODUCT_VARIANT_MAPPINGS,
   toProductGid,
   toVariantGid,
 } from "../approved-apple-care-mappings.server";
@@ -65,6 +66,27 @@ function getApprovedBundleMapping(variantId) {
   };
 }
 
+function getApprovedProductVariantMapping(variantId) {
+  const mapping = APPROVED_PRODUCT_VARIANT_MAPPINGS.find(
+    (item) => toVariantGid(item.variantId) === variantId,
+  );
+
+  if (!mapping) return null;
+
+  return {
+    shopifyProductId: toProductGid(mapping.productId),
+    shopifyProductTitle: mapping.productTitle,
+    shopifyVariantId: toVariantGid(mapping.variantId),
+    shopifyVariantTitle: mapping.variantTitle,
+    appleCareProductId: toProductGid(mapping.appleCareProductId),
+    appleCareProductTitle: mapping.appleCareProductTitle,
+    appleCareVariantId: toVariantGid(mapping.appleCareVariantId),
+    appleCareVariantTitle: mapping.appleCareVariantTitle,
+    appleCareSku: "",
+    appleCarePriceSnapshot: mapping.appleCarePriceSnapshot,
+  };
+}
+
 export const loader = async ({ request }) => {
   try {
     const { admin, session } = await authenticate.public.appProxy(request);
@@ -97,7 +119,7 @@ export const loader = async ({ request }) => {
       },
       orderBy: { updatedAt: "desc" },
     });
-    const mapping = dbMapping || getApprovedBundleMapping(variantId);
+    const mapping = dbMapping || getApprovedProductVariantMapping(variantId) || getApprovedBundleMapping(variantId);
 
     if (!mapping) {
       return Response.json({ ok: true, hasAppleCare: false });
