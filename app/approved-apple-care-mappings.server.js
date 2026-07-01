@@ -13,6 +13,17 @@ export const APPROVED_PRODUCT_PAIRS = [
 
 export const APPROVED_PRODUCT_VARIANT_MAPPINGS = [
   {
+    productId: "9153272283354",
+    productTitle: "Apple Watch SE 3 GPS",
+    variantId: "47553907884250",
+    variantTitle: "starlight / 40mm / S/M",
+    appleCareProductId: "9366766485722",
+    appleCareProductTitle: "AppleCare+ for Apple Watch SE3",
+    appleCareVariantId: "48132353884378",
+    appleCareVariantTitle: "Default Title",
+    appleCarePriceSnapshot: "0.00",
+  },
+  {
     productId: "9150929862874",
     productTitle: "15-inch MacBook Air M5-16GB",
     variantId: "47545473171674",
