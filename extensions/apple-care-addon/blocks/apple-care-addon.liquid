@@ -441,6 +441,57 @@
     const LOOKUP_DELAY_MS = 100;
     const POLL_INTERVAL_MS = 250;
     const ERROR_PREFIX = "[AppleCare Add-on]";
+    const APPROVED_APPLE_CARE_BY_VARIANT_ID = {
+      "47553907884250": {
+        productId: "gid://shopify/Product/9366766485722",
+        productTitle: "AppleCare+ for Apple Watch SE3",
+        variantId: "gid://shopify/ProductVariant/48132353884378",
+        variantTitle: "Default Title",
+        sku: "",
+        price: "0.00",
+      },
+      "47545473171674": {
+        productId: "gid://shopify/Product/9354605658330",
+        productTitle: "AppleCare+ for 15-inch MacBook Air (M5)",
+        variantId: "gid://shopify/ProductVariant/48090851410138",
+        variantTitle: "Default Title",
+        sku: "",
+        price: "939.97",
+      },
+      "47545473237210": {
+        productId: "gid://shopify/Product/9354605658330",
+        productTitle: "AppleCare+ for 15-inch MacBook Air (M5)",
+        variantId: "gid://shopify/ProductVariant/48090851410138",
+        variantTitle: "Default Title",
+        sku: "",
+        price: "939.97",
+      },
+      "47545473302746": {
+        productId: "gid://shopify/Product/9354605658330",
+        productTitle: "AppleCare+ for 15-inch MacBook Air (M5)",
+        variantId: "gid://shopify/ProductVariant/48090851410138",
+        variantTitle: "Default Title",
+        sku: "",
+        price: "939.97",
+      },
+      "47545473368282": {
+        productId: "gid://shopify/Product/9354605658330",
+        productTitle: "AppleCare+ for 15-inch MacBook Air (M5)",
+        variantId: "gid://shopify/ProductVariant/48090851410138",
+        variantTitle: "Default Title",
+        sku: "",
+        price: "939.97",
+      },
+      "48064420020442": {
+        productId: "gid://shopify/Product/9354607919322",
+        productTitle: "AppleCare+ for iPad (A16)",
+        variantId: "gid://shopify/ProductVariant/48090854981850",
+        variantTitle: "Default Title",
+        sku: "",
+        price: "284.7800",
+        forDevice: "iPad 11-inch",
+      },
+    };
 
     const normalizeVariantId = (value) => {
       const raw = String(value || "").trim();
@@ -464,21 +515,40 @@
       return form.querySelector('input[name="id"]');
     };
 
+    const getApprovedAppleCarePayload = (variantId) => {
+      const normalizedVariantId = normalizeVariantId(variantId);
+      const appleCare = APPROVED_APPLE_CARE_BY_VARIANT_ID[normalizedVariantId];
+      if (!appleCare) return null;
+
+      return {
+        ok: true,
+        hasAppleCare: true,
+        appleCare,
+      };
+    };
+
     const fetchAppleCare = async (lookupUrl, variantId) => {
-      const response = await fetch(`${lookupUrl}?variantId=${encodeURIComponent(variantId)}`, {
-        headers: {
-          Accept: "application/json",
-        },
-        cache: "no-store",
-        credentials: "same-origin",
-      });
+      const fallbackPayload = getApprovedAppleCarePayload(variantId);
 
-      if (!response.ok) {
-        throw new Error(`Lookup failed with status ${response.status}`);
+      try {
+        const response = await fetch(`${lookupUrl}?variantId=${encodeURIComponent(variantId)}`, {
+          headers: {
+            Accept: "application/json",
+          },
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+
+        if (!response.ok) {
+          if (fallbackPayload) return fallbackPayload;
+          throw new Error(`Lookup failed with status ${response.status}`);
+        }
+
+        return await response.json();
+      } catch (error) {
+        if (fallbackPayload) return fallbackPayload;
+        throw error;
       }
-
-      const payload = await response.json();
-      return payload;
     };
 
     const getQuantity = (form) => {
