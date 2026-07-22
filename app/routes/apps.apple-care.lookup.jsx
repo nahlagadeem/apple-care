@@ -89,7 +89,6 @@ function getApprovedProductVariantMapping(variantId) {
 
 export const loader = async ({ request }) => {
   try {
-    const { admin, session } = await authenticate.public.appProxy(request);
     const url = new URL(request.url);
     const variantIdParam = url.searchParams.get("variantId");
     const variantId = normalizeVariantId(variantIdParam);
@@ -105,21 +104,36 @@ export const loader = async ({ request }) => {
       );
     }
 
-    const shop = session?.shop || url.searchParams.get("shop");
-
-    if (!shop) {
-      return errorResponse("Shop context is missing from the app proxy request.", 400);
+    let admin = null;
+    let session = null;
+    try {
+      ({ admin, session } = await authenticate.public.appProxy(request));
+    } catch (error) {
+      console.warn("[AppleCare lookup] App proxy authentication failed; using approved mappings only.", {
+        status: error instanceof Response ? error.status : undefined,
+      });
     }
 
-    const dbMapping = await prisma.appleCareProductMapping.findFirst({
-      where: {
-        shop,
-        shopifyVariantId: variantId,
-        isActive: true,
-      },
-      orderBy: { updatedAt: "desc" },
-    });
-    const mapping = dbMapping || getApprovedProductVariantMapping(variantId) || getApprovedBundleMapping(variantId);
+    const shop = session?.shop || url.searchParams.get("shop");
+    const approvedMapping = getApprovedProductVariantMapping(variantId) || getApprovedBundleMapping(variantId);
+
+    let dbMapping = null;
+    if (shop) {
+      try {
+        dbMapping = await prisma.appleCareProductMapping.findFirst({
+          where: {
+            shop,
+            shopifyVariantId: variantId,
+            isActive: true,
+          },
+          orderBy: { updatedAt: "desc" },
+        });
+      } catch (error) {
+        console.error("[AppleCare lookup] Database mapping lookup failed; using approved mapping fallback.", error);
+      }
+    }
+
+    const mapping = dbMapping || approvedMapping;
 
     if (!mapping) {
       return Response.json({ ok: true, hasAppleCare: false });
@@ -135,22 +149,26 @@ export const loader = async ({ request }) => {
     };
 
     if (admin && mapping.appleCareVariantId) {
-      const response = await admin.graphql(APPLE_CARE_VARIANT_QUERY, {
-        variables: { id: mapping.appleCareVariantId },
-      });
-      const payload = await response.json();
+      try {
+        const response = await admin.graphql(APPLE_CARE_VARIANT_QUERY, {
+          variables: { id: mapping.appleCareVariantId },
+        });
+        const payload = await response.json();
 
-      if (!payload.errors && payload.data?.node) {
-        const node = payload.data.node;
-        appleCare = {
-          productId: node.product?.id || appleCare.productId,
-          productTitle: node.product?.title || appleCare.productTitle,
-          variantId: node.id || appleCare.variantId,
-          variantTitle: node.title || appleCare.variantTitle,
-          sku: node.sku || appleCare.sku,
-          price: node.price || appleCare.price,
-          forDevice: mapping.forDevice || appleCare.forDevice,
-        };
+        if (!payload.errors && payload.data?.node) {
+          const node = payload.data.node;
+          appleCare = {
+            productId: node.product?.id || appleCare.productId,
+            productTitle: node.product?.title || appleCare.productTitle,
+            variantId: node.id || appleCare.variantId,
+            variantTitle: node.title || appleCare.variantTitle,
+            sku: node.sku || appleCare.sku,
+            price: node.price || appleCare.price,
+            forDevice: mapping.forDevice || appleCare.forDevice,
+          };
+        }
+      } catch (error) {
+        console.error("[AppleCare lookup] AppleCare variant refresh failed; using mapped snapshot.", error);
       }
     }
 
@@ -163,10 +181,7 @@ export const loader = async ({ request }) => {
       },
     });
   } catch (error) {
-    if (error instanceof Response) {
-      throw error;
-    }
-
+    console.error("[AppleCare lookup] Unexpected lookup failure.", error);
     return errorResponse("Unable to look up AppleCare mapping.", 500);
   }
 };
