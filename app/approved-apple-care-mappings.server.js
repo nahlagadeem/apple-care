@@ -32,7 +32,7 @@ export const APPROVED_PRODUCT_VARIANT_MAPPINGS = [
     appleCareProductTitle: "AppleCare+ for 15-inch MacBook Air (M5)",
     appleCareVariantId: "48090851410138",
     appleCareVariantTitle: "Default Title",
-    appleCarePriceSnapshot: "939.97",
+    appleCarePriceSnapshot: "1086.45",
   },
   {
     productId: "9150929862874",
@@ -43,7 +43,7 @@ export const APPROVED_PRODUCT_VARIANT_MAPPINGS = [
     appleCareProductTitle: "AppleCare+ for 15-inch MacBook Air (M5)",
     appleCareVariantId: "48090851410138",
     appleCareVariantTitle: "Default Title",
-    appleCarePriceSnapshot: "939.97",
+    appleCarePriceSnapshot: "1086.45",
   },
   {
     productId: "9150929862874",
@@ -54,7 +54,7 @@ export const APPROVED_PRODUCT_VARIANT_MAPPINGS = [
     appleCareProductTitle: "AppleCare+ for 15-inch MacBook Air (M5)",
     appleCareVariantId: "48090851410138",
     appleCareVariantTitle: "Default Title",
-    appleCarePriceSnapshot: "939.97",
+    appleCarePriceSnapshot: "1086.45",
   },
   {
     productId: "9150929862874",
@@ -65,7 +65,7 @@ export const APPROVED_PRODUCT_VARIANT_MAPPINGS = [
     appleCareProductTitle: "AppleCare+ for 15-inch MacBook Air (M5)",
     appleCareVariantId: "48090851410138",
     appleCareVariantTitle: "Default Title",
-    appleCarePriceSnapshot: "939.97",
+    appleCarePriceSnapshot: "1086.45",
   },
 ];
 
@@ -79,7 +79,7 @@ export const APPROVED_BUNDLE_VARIANT_MAPPINGS = [
     appleCareProductTitle: "AppleCare+ for iPad (A16)",
     appleCareVariantId: "48090854981850",
     appleCareVariantTitle: "Default Title",
-    appleCarePriceSnapshot: "284.7800",
+    appleCarePriceSnapshot: "352.73",
     forDevice: "iPad 11-inch",
     note: "Primary Years Learning Bundle includes iPad 11-inch",
   },
